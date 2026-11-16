@@ -10,7 +10,7 @@
 # local build provides it.
 
 Name:           open-rmslist
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        Winlink RMS gateway map with service-code filtering and propagation ranking
 
