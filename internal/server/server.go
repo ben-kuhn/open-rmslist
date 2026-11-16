@@ -1,0 +1,310 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"io/fs"
+	"net/http"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ben-kuhn/open-rmslist/internal/catalog"
+	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
+	"github.com/ben-kuhn/open-rmslist/internal/propagation"
+)
+
+// Config configures the HTTP server.
+type Config struct {
+	Version          string
+	ServiceCodes     []string
+	HistoryHours     int
+	ModeSwaps        []catalog.ModeSwap
+	VOACAPURL        string
+	VOACAPExecutable string
+	VOACAPDataDir    string
+}
+
+// Server serves the web UI and JSON API.
+type Server struct {
+	cfg       Config
+	web       fs.FS
+	loader    *cmsapi.Loader
+	heuristic *propagation.Heuristic
+	ranker    *propagation.Ranker
+
+	stationsMu sync.RWMutex
+	stations   []catalog.Station
+
+	voacapEnabled bool
+}
+
+func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heuristic) *Server {
+	// More accurate predictors first; the always-available heuristic is last.
+	var predictors []propagation.Predictor
+	voacapEnabled := false
+	if cfg.VOACAPURL != "" {
+		predictors = append(predictors, propagation.NewVOACAPAPI(cfg.VOACAPURL))
+		voacapEnabled = true
+	}
+	if cfg.VOACAPExecutable != "" {
+		if p, err := propagation.NewVOACAP(cfg.VOACAPExecutable, cfg.VOACAPDataDir); err == nil {
+			predictors = append(predictors, p)
+			voacapEnabled = true
+		}
+	}
+	predictors = append(predictors, heur)
+
+	return &Server{
+		cfg:           cfg,
+		web:           web,
+		loader:        loader,
+		heuristic:     heur,
+		ranker:        &propagation.Ranker{Predictors: predictors},
+		voacapEnabled: voacapEnabled,
+	}
+}
+
+// Refresh re-parses the loader's current snapshot into the normalized catalog.
+func (s *Server) Refresh(ctx context.Context) error {
+	data, _, _ := s.loader.Snapshot()
+	if len(data) == 0 {
+		return nil
+	}
+	var status cmsapi.GatewayStatus
+	if err := json.Unmarshal(data, &status); err != nil {
+		return err
+	}
+	stations := catalog.Normalize(&status, s.cfg.ModeSwaps)
+	s.stationsMu.Lock()
+	s.stations = stations
+	s.stationsMu.Unlock()
+	return nil
+}
+
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/health", s.handleHealth)
+	mux.HandleFunc("/api/gateways", s.handleGateways)
+	mux.HandleFunc("/api/servicecodes", s.handleServiceCodes)
+	mux.HandleFunc("/api/conditions", s.handleConditions)
+	mux.HandleFunc("/api/rank", s.handleRank)
+	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.Handle("/", http.FileServer(http.FS(s.web)))
+	return mux
+}
+
+func (s *Server) snapshotStations() []catalog.Station {
+	s.stationsMu.RLock()
+	defer s.stationsMu.RUnlock()
+	return s.stations
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	_, source, at := s.loader.Snapshot()
+	stations := s.snapshotStations()
+	writeJSON(w, map[string]any{
+		"ok":            true,
+		"version":       s.cfg.Version,
+		"source":        source.String(),
+		"fetched_at":    at.UTC().Format(time.RFC3339),
+		"stations":      len(stations),
+		"service_codes": s.cfg.ServiceCodes,
+	})
+}
+
+func (s *Server) handleGateways(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.snapshotStations())
+}
+
+func (s *Server) handleServiceCodes(w http.ResponseWriter, r *http.Request) {
+	counts := map[string]int{}
+	for _, st := range s.snapshotStations() {
+		for _, ch := range st.Channels {
+			sc := ch.ServiceCode
+			if sc == "" {
+				sc = "PUBLIC"
+			}
+			counts[sc]++
+		}
+	}
+	type scEntry struct {
+		Code  string `json:"code"`
+		Count int    `json:"count"`
+	}
+	list := make([]scEntry, 0, len(counts))
+	for k, v := range counts {
+		list = append(list, scEntry{Code: k, Count: v})
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Count > list[j].Count })
+	writeJSON(w, list)
+}
+
+func (s *Server) handleConditions(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.heuristic.Conditions())
+}
+
+func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"version":       s.cfg.Version,
+		"service_codes": s.cfg.ServiceCodes,
+		"mode_swaps":    s.cfg.ModeSwaps,
+		"voacap":        s.voacapEnabled,
+	})
+}
+
+// rankedEntry is one (station, channel) candidate in a ranked result.
+type rankedEntry struct {
+	Callsign    string  `json:"callsign"`
+	Latitude    float64 `json:"latitude"`
+	Longitude   float64 `json:"longitude"`
+	Gridsquare  string  `json:"gridsquare"`
+	ServiceCode string  `json:"service_code"`
+	Mode        string  `json:"mode"`
+	ModeFamily  string  `json:"mode_family"`
+	Band        string  `json:"band"`
+	FrequencyHz float64 `json:"frequency_hz"`
+	Frequency   string  `json:"frequency"`
+	DistanceKm  float64 `json:"distance_km"`
+	BearingDeg  float64 `json:"bearing_deg"`
+	LinkQuality int     `json:"link_quality"`
+	BandOpen    bool    `json:"band_open"`
+	MUF         float64 `json:"muf_mhz,omitempty"`
+	Method      string  `json:"method"`
+	Note        string  `json:"note,omitempty"`
+}
+
+func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
+	grid := r.URL.Query().Get("grid")
+	band := r.URL.Query().Get("band")
+	mode := r.URL.Query().Get("mode")
+	sc := r.URL.Query().Get("service_code")
+
+	if r.Method == http.MethodPost {
+		var rr struct {
+			Grid        string `json:"grid"`
+			Band        string `json:"band"`
+			Mode        string `json:"mode"`
+			ServiceCode string `json:"service_code"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&rr); err == nil {
+			grid, band, mode, sc = rr.Grid, rr.Band, rr.Mode, rr.ServiceCode
+		}
+	}
+
+	from, err := propagation.ParseLocator(grid)
+	if err != nil {
+		http.Error(w, "invalid grid locator: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	ssn := s.heuristic.Conditions().Sunspots
+
+	type cand struct {
+		st catalog.Station
+		ch catalog.Channel
+	}
+	var cands []cand
+	for _, st := range s.snapshotStations() {
+		for _, ch := range st.Channels {
+			if sc != "" && !strings.EqualFold(ch.ServiceCode, sc) {
+				continue
+			}
+			if band != "" && ch.Band != band {
+				continue
+			}
+			if mode != "" && !strings.EqualFold(ch.ModeFamily, mode) {
+				continue
+			}
+			cands = append(cands, cand{st: st, ch: ch})
+		}
+	}
+
+	out := make([]rankedEntry, len(cands))
+	workers := runtime.NumCPU()
+	if workers < 1 {
+		workers = 1
+	}
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for idx := range jobs {
+				c := cands[idx]
+				pred, err := s.ranker.Predict(ctx, propagation.Params{
+					FromLat:      from.Lat,
+					FromLon:      from.Lon,
+					ToLat:        c.st.Latitude,
+					ToLon:        c.st.Longitude,
+					FrequencyHz:  c.ch.FrequencyHz,
+					Mode:         c.ch.ModeFamily,
+					RadioRangeKm: parseRangeKm(c.ch.RadioRange),
+					SSN:          ssn,
+				})
+				if err != nil {
+					out[idx].LinkQuality = -1
+					continue
+				}
+				out[idx] = rankedEntry{
+					Callsign:    c.st.Callsign,
+					Latitude:    c.st.Latitude,
+					Longitude:   c.st.Longitude,
+					Gridsquare:  c.ch.Gridsquare,
+					ServiceCode: c.ch.ServiceCode,
+					Mode:        c.ch.Mode,
+					ModeFamily:  c.ch.ModeFamily,
+					Band:        c.ch.Band,
+					FrequencyHz: c.ch.FrequencyHz,
+					Frequency:   c.ch.Frequency,
+					DistanceKm:  pred.DistanceKm,
+					BearingDeg:  pred.BearingDeg,
+					LinkQuality: pred.LinkQuality,
+					BandOpen:    pred.BandOpen,
+					MUF:         pred.MUF,
+					Method:      pred.Method,
+					Note:        pred.Note,
+				}
+			}
+		}()
+	}
+	for i := range cands {
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
+
+	results := make([]rankedEntry, 0, len(out))
+	for _, e := range out {
+		if e.LinkQuality >= 0 {
+			results = append(results, e)
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].LinkQuality != results[j].LinkQuality {
+			return results[i].LinkQuality > results[j].LinkQuality
+		}
+		return results[i].DistanceKm < results[j].DistanceKm
+	})
+	writeJSON(w, results)
+}
+
+// parseRangeKm parses the gateway's advertised radio range. Winlink reports
+// this in miles; we convert to km (the exact unit matters little for ranking).
+func parseRangeKm(s string) float64 {
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil || f <= 0 {
+		return 0
+	}
+	return f * 1.60934
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(v)
+}

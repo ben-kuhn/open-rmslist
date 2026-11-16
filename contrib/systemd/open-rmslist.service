@@ -1,0 +1,28 @@
+[Unit]
+Description=open-rmslist — Winlink RMS gateway map
+Documentation=https://github.com/ben-kuhn/open-rmslist
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Create a dedicated user and a writable data directory, or use DynamicUser
+# with StateDirectory (see the NixOS module in ../nix-ham-packages).
+User=open-rmslist
+Group=open-rmslist
+# Bind to 127.0.0.1 for a private instance, or 0.0.0.0 to serve your LAN.
+ExecStart=/usr/local/bin/open-rmslist -listen 127.0.0.1:8080 -cache-dir /var/lib/open-rmslist
+Restart=on-failure
+RestartSec=5
+
+# Hardening (remove or relax if you need broader filesystem access).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/open-rmslist
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

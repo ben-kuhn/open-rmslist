@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>open-rmslist — Winlink gateway map</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">◉</span>
+    <div class="brand-text">
+      <span class="name">open-rmslist</span>
+      <span class="tag">Winlink gateway map</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <label class="field">Service code
+      <select id="service-code"></select>
+    </label>
+    <label class="field">Mode
+      <select id="mode"></select>
+    </label>
+    <label class="field">Band
+      <select id="band"></select>
+    </label>
+    <label class="field">Your grid
+      <input id="grid" maxlength="6" placeholder="EM38xx" autocomplete="off" spellcheck="false">
+    </label>
+    <button id="rank-btn" class="btn btn-primary" title="Rank stations by predicted link success">Rank</button>
+    <button id="theme-btn" class="btn btn-icon" title="Toggle dark/light" aria-label="Toggle theme">◐</button>
+  </div>
+
+  <div class="status" id="status">loading…</div>
+</header>
+
+<section class="conditions" id="conditions" hidden>
+  <span class="cond-item">SFI <b id="sfi">–</b></span>
+  <span class="cond-item">A <b id="a">–</b></span>
+  <span class="cond-item">K <b id="k">–</b></span>
+  <span class="cond-item">Updated <b id="cond-updated">–</b></span>
+  <span class="cond-item" id="cond-stale" hidden>offline data</span>
+  <span class="cond-note" id="cond-note"></span>
+</section>
+
+<div class="layout">
+  <div id="map" role="application" aria-label="Gateway map"></div>
+
+  <aside class="panel">
+    <div class="panel-head">
+      <h2>Gateways <span class="count" id="count"></span></h2>
+      <label class="chk"><input type="checkbox" id="rank-mode" checked> highlight ranked</label>
+    </div>
+
+    <div class="legend">
+      <span class="lg"><i class="dot dot-green"></i>&lt;2h</span>
+      <span class="lg"><i class="dot dot-yellow"></i>2–4h</span>
+      <span class="lg"><i class="dot dot-red"></i>&gt;4h</span>
+      <span class="lg"><i class="dot dot-rank"></i>ranked</span>
+    </div>
+
+    <ul id="list" class="list"></ul>
+  </aside>
+</div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

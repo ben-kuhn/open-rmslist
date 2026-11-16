@@ -1,0 +1,10 @@
+# Runtime cache (gateway list + propagation conditions)
+data/
+
+# Build output
+/open-rmslist
+/dist/
+
+# OS/editor
+.DS_Store
+*.swp
