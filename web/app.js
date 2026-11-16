@@ -7,8 +7,7 @@ const state = {
   config: {},
   conditions: null,
   ranked: new Map(),     // callsign -> best ranked entry
-  rankRequest: null,     // {grid, band, mode, service_code} of last rank
-  filters: { serviceCode: "", mode: "", band: "", grid: "" },
+  filters: { serviceCode: "", mode: "", band: "" },
   theme: "dark",
 };
 
@@ -328,7 +327,6 @@ async function doRank() {
         state.ranked.set(r.callsign, r);
       }
     }
-    state.rankRequest = req;
     let msg = `${results.length} candidate${results.length === 1 ? "" : "s"} ranked for ` +
       `${req.band || "all bands"} ${req.mode || "all modes"} from ${grid}.`;
     if (!state.config.voacap) {
@@ -343,7 +341,6 @@ async function doRank() {
 
 function clearRank() {
   state.ranked = new Map();
-  state.rankRequest = null;
   setNote("");
   applyFilters();
 }
@@ -375,7 +372,7 @@ function wireEvents() {
   });
   $("mode").addEventListener("change", (e) => { state.filters.mode = e.target.value; clearRank(); });
   $("band").addEventListener("change", (e) => { state.filters.band = e.target.value; clearRank(); });
-  $("grid").addEventListener("change", () => { state.filters.grid = $("grid").value.trim().toUpperCase(); $("grid").value = state.filters.grid; });
+  $("grid").addEventListener("change", () => { $("grid").value = $("grid").value.trim().toUpperCase(); });
   $("rank-btn").addEventListener("click", doRank);
   $("rank-mode").addEventListener("change", applyFilters);
   $("theme-btn").addEventListener("click", () => applyTheme(state.theme === "dark" ? "light" : "dark"));

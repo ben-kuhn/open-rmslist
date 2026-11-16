@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"os"
@@ -28,11 +29,11 @@ type Conditions struct {
 
 // Ionosonde is a single real-time ionosonde sounding.
 type Ionosonde struct {
-	Fof2 float64
-	Mufd float64
-	Lat  float64
-	Lon  float64
-	Time time.Time
+	Fof2 float64   `json:"fof2"`
+	Mufd float64   `json:"mufd"`
+	Lat  float64   `json:"lat"`
+	Lon  float64   `json:"lon"`
+	Time time.Time `json:"time"`
 }
 
 // Heuristic estimates link success using real-time ionosonde MUF data plus
@@ -74,10 +75,13 @@ func (h *Heuristic) RefreshConditions(ctx context.Context) {
 	cond, iono, err := h.fetchConditions(ctx)
 	if err != nil {
 		if c, i, cerr := h.loadCached(); cerr == nil {
+			log.Printf("propagation conditions refresh failed (%v); using cached data", err)
 			c.Stale = true
 			h.mu.Lock()
 			h.cond, h.ionosondes = c, i
 			h.mu.Unlock()
+		} else {
+			log.Printf("propagation conditions refresh failed (%v); no cache available", err)
 		}
 		return
 	}
@@ -278,20 +282,27 @@ type kc2gStation struct {
 func (h *Heuristic) fetchConditions(ctx context.Context) (Conditions, []Ionosonde, error) {
 	var cond Conditions
 	var iono []Ionosonde
-	var errs int
 
+	solarErr := error(nil)
 	if c, err := h.fetchSolar(ctx); err == nil {
 		cond = c
 	} else {
-		errs++
+		solarErr = err
 	}
+	ionoErr := error(nil)
 	if i, err := h.fetchIonosondes(ctx); err == nil {
 		iono = i
 	} else {
-		errs++
+		ionoErr = err
 	}
-	if errs == 2 {
-		return cond, nil, fmt.Errorf("solar and ionosonde fetch failed")
+
+	switch {
+	case solarErr != nil && ionoErr != nil:
+		return cond, nil, fmt.Errorf("solar: %v; ionosonde: %v", solarErr, ionoErr)
+	case solarErr != nil:
+		log.Printf("propagation: solar fetch failed (%v); using ionosonde data only", solarErr)
+	case ionoErr != nil:
+		log.Printf("propagation: ionosonde fetch failed (%v); using solar data only", ionoErr)
 	}
 	cond.Updated = time.Now()
 	return cond, iono, nil

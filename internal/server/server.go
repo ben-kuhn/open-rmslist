@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io/fs"
+	"log"
 	"net/http"
 	"runtime"
 	"sort"
@@ -94,7 +95,23 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/rank", s.handleRank)
 	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.Handle("/", http.FileServer(http.FS(s.web)))
-	return mux
+	return securityHeaders(mux)
+}
+
+// securityHeaders adds defensive headers to every response. The CSP allows the
+// pinned OSM/CARTO tile hosts and Leaflet's inline styles.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' https://*.basemaps.cartocdn.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org; "+
+				"connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) snapshotStations() []catalog.Station {
@@ -177,6 +194,10 @@ type rankedEntry struct {
 	Note        string  `json:"note,omitempty"`
 }
 
+// maxRankCandidates bounds a single rank request; a whole-feed rank (all
+// bands/modes) is a self-DoS, especially when each candidate runs VOACAP.
+const maxRankCandidates = 500
+
 func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 	grid := r.URL.Query().Get("grid")
 	band := r.URL.Query().Get("band")
@@ -190,7 +211,8 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 			Mode        string `json:"mode"`
 			ServiceCode string `json:"service_code"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&rr); err == nil {
+		body := http.MaxBytesReader(w, r.Body, 1<<20)
+		if err := json.NewDecoder(body).Decode(&rr); err == nil {
 			grid, band, mode, sc = rr.Grid, rr.Band, rr.Mode, rr.ServiceCode
 		}
 	}
@@ -201,7 +223,6 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
 	ssn := s.heuristic.Conditions().Sunspots
 
 	type cand struct {
@@ -224,7 +245,22 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	truncated := len(cands) > maxRankCandidates
+	if truncated {
+		cands = cands[:maxRankCandidates]
+		w.Header().Set("X-Rank-Truncated", "true")
+		log.Printf("rank: truncated to %d candidates; narrow band/mode for complete results", maxRankCandidates)
+	}
+
+	timeout := 120 * time.Second
+	if s.voacapEnabled {
+		timeout = 5 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
 	out := make([]rankedEntry, len(cands))
+	ok := make([]bool, len(cands))
 	workers := runtime.NumCPU()
 	if workers < 1 {
 		workers = 1
@@ -248,9 +284,9 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 					SSN:          ssn,
 				})
 				if err != nil {
-					out[idx].LinkQuality = -1
 					continue
 				}
+				ok[idx] = true
 				out[idx] = rankedEntry{
 					Callsign:    c.st.Callsign,
 					Latitude:    c.st.Latitude,
@@ -280,10 +316,20 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 	wg.Wait()
 
 	results := make([]rankedEntry, 0, len(out))
-	for _, e := range out {
-		if e.LinkQuality >= 0 {
-			results = append(results, e)
+	failed := 0
+	for i := range out {
+		if ok[i] {
+			results = append(results, out[i])
+		} else {
+			failed++
 		}
+	}
+	if failed > 0 {
+		w.Header().Set("X-Rank-Errors", strconv.Itoa(failed))
+		log.Printf("rank: %d of %d candidates failed", failed, len(out))
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		log.Printf("rank: deadline (%s) exceeded", timeout)
 	}
 	sort.Slice(results, func(i, j int) bool {
 		if results[i].LinkQuality != results[j].LinkQuality {

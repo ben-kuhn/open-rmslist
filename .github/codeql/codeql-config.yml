@@ -1,0 +1,6 @@
+name: CodeQL config
+
+# Keep analysis focused on first-party code; the vendored Leaflet bundle is
+# third-party and would only add noise.
+paths-ignore:
+  - web/vendor/**

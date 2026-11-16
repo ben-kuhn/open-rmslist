@@ -23,7 +23,17 @@ func ParseLocator(loc string) (Point, error) {
 		n = 6 // ignore finer precision than a sub-square
 	}
 	if loc[0] < 'A' || loc[0] > 'R' || loc[1] < 'A' || loc[1] > 'R' {
-		return Point{}, errors.New("invalid grid locator")
+		return Point{}, errors.New("invalid grid locator field")
+	}
+	if n >= 4 {
+		if loc[2] < '0' || loc[2] > '9' || loc[3] < '0' || loc[3] > '9' {
+			return Point{}, errors.New("invalid grid locator square")
+		}
+	}
+	if n >= 6 {
+		if loc[4] < 'A' || loc[4] > 'X' || loc[5] < 'A' || loc[5] > 'X' {
+			return Point{}, errors.New("invalid grid locator subsquare")
+		}
 	}
 
 	// First pair: field (20° lon x 10° lat).

@@ -61,7 +61,7 @@ open <http://localhost:8080> yourself (or pass `-open-browser`).
 
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
-| `-listen` | `OPENRMSLIST_LISTEN` | `:8080` | HTTP listen address |
+| `-listen` | `OPENRMSLIST_LISTEN` | `127.0.0.1:8080` | HTTP listen address (use `0.0.0.0:8080` to serve the LAN) |
 | `-service-codes` | `OPENRMSLIST_SERVICE_CODES` | `PUBLIC,MERCURY,VardeFM` | Comma-separated service codes to fetch |
 | `-refresh` | `OPENRMSLIST_REFRESH` | `15m` | Gateway list refresh interval |
 | `-cache-dir` | `OPENRMSLIST_CACHE_DIR` | `./data` | Cache directory |
@@ -206,6 +206,31 @@ Packaging included:
 
 Map tiles still require connectivity (or a local tile cache); the station data
 and list remain fully usable offline.
+
+## Security & privacy
+
+`open-rmslist` is designed as a single-user, self-hosted tool and has **no
+authentication**. Treat it as a LAN/loopback service:
+
+- **Binds to `127.0.0.1:8080` by default.** Pass `-listen 0.0.0.0:8080` (and
+  put it behind a reverse proxy or VPN) only if you intend to expose it.
+- **No auth, no cookies, no write endpoints.** The API is read-only; `/api/rank`
+  only computes predictions. It is still a compute endpoint, so it is capped
+  (500 candidates per request) and time-limited.
+- **Security headers** (CSP, `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options`, `Referrer-Policy`) are set on every response, and all
+  third-party gateway data is HTML-escaped before rendering.
+- **Outbound only:** the service fetches the gateway list from
+  `api.winlink.org` and propagation data from `prop.hamqsl.com` /
+  `prop.kc2g.com`, over verified TLS. It makes no inbound connections.
+- **VOACAP auto-download (`-voacap-download-url`) executes a third-party
+  binary.** It is opt-in and off by default. Prefer your OS package manager; if
+  you use the downloader, supply `-voacap-download-sha256` and trust the source
+  you point it at. Archives are size-capped, and extraction rejects
+  path-traversal entries.
+- **Privacy:** gateway data (including the sysop `Comments` field, which may
+  contain contact details) is the same data Winlink publishes publicly. The
+  embedded fallback snapshot is a frozen copy of that public feed.
 
 ## License
 

@@ -22,7 +22,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
+
+const (
+	maxDownloadBytes  = 512 << 20 // compressed archive cap
+	maxExtractedBytes = 256 << 20 // total uncompressed cap (zip-bomb guard)
+	maxEntries        = 20000
+)
+
+// downloadClient has a bounded timeout so a hung server cannot stall startup.
+var downloadClient = &http.Client{Timeout: 120 * time.Second}
 
 // Fetch downloads the archive at url, optionally verifies its SHA-256, extracts
 // it into destDir, and returns the voacapl/voacapw executable path and the
@@ -54,7 +64,7 @@ func download(ctx context.Context, url, destDir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := downloadClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -62,15 +72,22 @@ func download(ctx context.Context, url, destDir string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download %s: HTTP %s", url, resp.Status)
 	}
+	if resp.ContentLength > maxDownloadBytes {
+		return "", fmt.Errorf("archive is larger than %d MiB", maxDownloadBytes>>20)
+	}
 
 	tmp, err := os.CreateTemp(destDir, "voacap-*.dl")
 	if err != nil {
 		return "", err
 	}
-	n, err := io.Copy(tmp, resp.Body)
+	n, err := io.Copy(tmp, io.LimitReader(resp.Body, maxDownloadBytes+1))
 	tmp.Close()
 	if err != nil {
 		return "", err
+	}
+	if n > maxDownloadBytes {
+		os.Remove(tmp.Name())
+		return "", fmt.Errorf("archive exceeds %d MiB", maxDownloadBytes>>20)
 	}
 	log.Printf("voacapl: downloaded %.1f MB", float64(n)/(1024*1024))
 	return tmp.Name(), nil
@@ -113,6 +130,10 @@ func extractZip(path, destDir string) error {
 		return err
 	}
 	defer zr.Close()
+	if len(zr.File) > maxEntries {
+		return fmt.Errorf("archive has too many entries (%d)", len(zr.File))
+	}
+	budget := int64(maxExtractedBytes)
 	for _, f := range zr.File {
 		target, err := safeJoin(destDir, f.Name)
 		if err != nil {
@@ -131,7 +152,7 @@ func extractZip(path, destDir string) error {
 		if err != nil {
 			return err
 		}
-		err = writeFile(target, rc, f.Mode())
+		err = writeFile(target, rc, f.Mode(), &budget)
 		rc.Close()
 		if err != nil {
 			return err
@@ -165,6 +186,8 @@ func extractTarFile(path, destDir string) error {
 
 func extractTar(r io.Reader, destDir string) error {
 	tr := tar.NewReader(r)
+	budget := int64(maxExtractedBytes)
+	entries := 0
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -172,6 +195,10 @@ func extractTar(r io.Reader, destDir string) error {
 		}
 		if err != nil {
 			return err
+		}
+		entries++
+		if entries > maxEntries {
+			return fmt.Errorf("archive has too many entries (max %d)", maxEntries)
 		}
 		target, err := safeJoin(destDir, hdr.Name)
 		if err != nil {
@@ -186,7 +213,7 @@ func extractTar(r io.Reader, destDir string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-			if err := writeFile(target, tr, os.FileMode(hdr.Mode)); err != nil {
+			if err := writeFile(target, tr, os.FileMode(hdr.Mode), &budget); err != nil {
 				return err
 			}
 		}
@@ -204,7 +231,12 @@ func safeJoin(base, name string) (string, error) {
 	return target, nil
 }
 
-func writeFile(path string, r io.Reader, mode os.FileMode) error {
+// writeFile writes r to path, subtracting the bytes written from budget. It
+// fails if the entry would push the total extraction past the budget.
+func writeFile(path string, r io.Reader, mode os.FileMode, budget *int64) error {
+	if *budget <= 0 {
+		return fmt.Errorf("archive exceeds extraction size limit (%d MiB)", maxExtractedBytes>>20)
+	}
 	perm := mode.Perm()
 	if perm == 0 {
 		perm = 0o644
@@ -213,11 +245,19 @@ func writeFile(path string, r io.Reader, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, r); err != nil {
-		out.Close()
+	lr := &io.LimitedReader{R: r, N: *budget + 1}
+	n, err := io.Copy(out, lr)
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
 		return err
 	}
-	return out.Close()
+	if lr.N == 0 { // the entry tried to write past the remaining budget
+		return fmt.Errorf("archive exceeds extraction size limit (%d MiB)", maxExtractedBytes>>20)
+	}
+	*budget -= n
+	return nil
 }
 
 // Find locates the voacapl/voacapw executable and the itshfbc data directory

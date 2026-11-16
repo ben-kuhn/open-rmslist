@@ -32,7 +32,7 @@ var webFS embed.FS
 
 func main() {
 	var (
-		addr         = flag.String("listen", envOr("OPENRMSLIST_LISTEN", ":8080"), "HTTP listen address")
+		addr         = flag.String("listen", envOr("OPENRMSLIST_LISTEN", "127.0.0.1:8080"), "HTTP listen address (use 0.0.0.0:8080 to serve the LAN)")
 		serviceCodes = flag.String("service-codes", envOr("OPENRMSLIST_SERVICE_CODES", "PUBLIC,MERCURY,VardeFM"), "comma-separated Winlink service codes to fetch")
 		refresh      = flag.Duration("refresh", envDuration("OPENRMSLIST_REFRESH", 15*time.Minute), "gateway list refresh interval")
 		cacheDir     = flag.String("cache-dir", envOr("OPENRMSLIST_CACHE_DIR", "./data"), "cache directory for gateway list and propagation data")
@@ -122,6 +122,9 @@ func main() {
 		Addr:              *addr,
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      5 * time.Minute, // accommodates a full VOACAP rank
+		IdleTimeout:       120 * time.Second,
 	}
 
 	if *openBrowser {
