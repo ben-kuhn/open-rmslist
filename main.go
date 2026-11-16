@@ -25,14 +25,14 @@ import (
 )
 
 // version is overridable at link time via -ldflags "-X main.version=...".
-var version = "0.1.1"
+var version = "0.1.2"
 
 //go:embed all:web
 var webFS embed.FS
 
 func main() {
 	var (
-		addr         = flag.String("listen", envOr("OPENRMSLIST_LISTEN", "127.0.0.1:8080"), "HTTP listen address (use 0.0.0.0:8080 to serve the LAN)")
+		addr         = flag.String("listen", envOr("OPENRMSLIST_LISTEN", "127.0.0.1:8079"), "HTTP listen address (use 0.0.0.0:8079 to serve the LAN)")
 		serviceCodes = flag.String("service-codes", envOr("OPENRMSLIST_SERVICE_CODES", "PUBLIC,MERCURY,VardeFM"), "comma-separated Winlink service codes to fetch")
 		refresh      = flag.Duration("refresh", envDuration("OPENRMSLIST_REFRESH", 15*time.Minute), "gateway list refresh interval")
 		cacheDir     = flag.String("cache-dir", envOr("OPENRMSLIST_CACHE_DIR", "./data"), "cache directory for gateway list and propagation data")
@@ -159,7 +159,7 @@ func webFilesystem(dir string) (fs.FS, error) {
 func browserURL(addr string) string {
 	host := addr
 	if host == "" {
-		host = ":8080"
+		host = ":8079"
 	}
 	switch {
 	case strings.HasPrefix(host, ":"):

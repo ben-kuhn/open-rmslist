@@ -51,17 +51,17 @@ Requires Go 1.23+ (no third-party Go dependencies; the web UI is embedded).
 
 ```bash
 go build -o open-rmslist .
-./open-rmslist                 # serves on http://localhost:8080
+./open-rmslist                 # serves on http://localhost:8079
 ```
 
 Your default browser opens automatically on macOS and Windows. On Linux/BSD,
-open <http://localhost:8080> yourself (or pass `-open-browser`).
+open <http://localhost:8079> yourself (or pass `-open-browser`).
 
 ### Configuration
 
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
-| `-listen` | `OPENRMSLIST_LISTEN` | `127.0.0.1:8080` | HTTP listen address (use `0.0.0.0:8080` to serve the LAN) |
+| `-listen` | `OPENRMSLIST_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
 | `-service-codes` | `OPENRMSLIST_SERVICE_CODES` | `PUBLIC,MERCURY,VardeFM` | Comma-separated service codes to fetch |
 | `-refresh` | `OPENRMSLIST_REFRESH` | `15m` | Gateway list refresh interval |
 | `-cache-dir` | `OPENRMSLIST_CACHE_DIR` | `./data` | Cache directory |
@@ -212,7 +212,7 @@ and list remain fully usable offline.
 `open-rmslist` is designed as a single-user, self-hosted tool and has **no
 authentication**. Treat it as a LAN/loopback service:
 
-- **Binds to `127.0.0.1:8080` by default.** Pass `-listen 0.0.0.0:8080` (and
+- **Binds to `127.0.0.1:8079` by default.** Pass `-listen 0.0.0.0:8079` (and
   put it behind a reverse proxy or VPN) only if you intend to expose it.
 - **No auth, no cookies, no write endpoints.** The API is read-only; `/api/rank`
   only computes predictions. It is still a compute endpoint, so it is capped
