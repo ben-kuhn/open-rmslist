@@ -9,6 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo dev)}"
+VERSION="${VERSION#v}" # strip a leading "v" (e.g. from a vX.Y.Z tag)
 OUT="${OUT:-dist}"
 
 rm -rf "$OUT"
