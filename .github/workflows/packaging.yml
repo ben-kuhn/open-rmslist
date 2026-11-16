@@ -16,12 +16,15 @@ jobs:
       - name: build RPM
         run: |
           dnf -y install golang rpm-build systemd-rpm-macros
-          mkdir -p ~/rpmbuild/SOURCES
           cd "$GITHUB_WORKSPACE"
+          VERSION="$(sed -n 's/^var version = "\([^"]*\)"/\1/p' main.go)"
+          [ -n "$VERSION" ] || { echo "could not determine version" >&2; exit 1; }
+          PREFIX="open-rmslist-${VERSION}"
+          mkdir -p "$HOME/rpmbuild/SOURCES"
           # Source0 points at the GitHub tag, which may not exist yet; build a
           # local tarball with the same layout for validation.
-          tar -czf ~/rpmbuild/SOURCES/open-rmslist-0.1.0.tar.gz \
-            --exclude=.git --transform 's,^\./,open-rmslist-0.1.0/,' .
+          tar -czf "$HOME/rpmbuild/SOURCES/${PREFIX}.tar.gz" \
+            --exclude=.git --transform "s,^\\./,${PREFIX}/," .
           rpmbuild -ba packaging/rpm/open-rmslist.spec
 
   arch:
@@ -35,10 +38,13 @@ jobs:
           pacman -Sy --noconfirm --needed base-devel go
           useradd -m builder
           cd "$GITHUB_WORKSPACE"
+          VERSION="$(sed -n 's/^var version = "\([^"]*\)"/\1/p' main.go)"
+          [ -n "$VERSION" ] || { echo "could not determine version" >&2; exit 1; }
+          PREFIX="open-rmslist-${VERSION}"
           # PKGBUILD source points at the GitHub tag; drop a local tarball with
           # the same name so makepkg uses it instead of downloading.
-          tar -czf packaging/arch/open-rmslist-0.1.0.tar.gz \
-            --exclude=.git --transform 's,^\./,open-rmslist-0.1.0/,' .
+          tar -czf "packaging/arch/${PREFIX}.tar.gz" \
+            --exclude=.git --transform "s,^\\./,${PREFIX}/," .
           chown -R builder:builder .
           # CI builds a local tarball from the current commit, so the pinned
           # release sha256 won't match; skip checksum validation here (it is
