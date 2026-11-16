@@ -18,6 +18,10 @@ License:        MIT
 URL:            https://github.com/ben-kuhn/open-rmslist
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
 
+# Static Go binary with no usable DWARF; disable the debuginfo subpackage to
+# avoid an empty debugsourcefiles.list.
+%global debug_package %{nil}
+
 BuildRequires:  golang
 BuildRequires:  systemd-rpm-macros
 
