@@ -40,7 +40,10 @@ jobs:
           tar -czf packaging/arch/open-rmslist-0.1.0.tar.gz \
             --exclude=.git --transform 's,^\./,open-rmslist-0.1.0/,' .
           chown -R builder:builder .
-          su builder -c "cd $GITHUB_WORKSPACE/packaging/arch && makepkg --noconfirm"
+          # CI builds a local tarball from the current commit, so the pinned
+          # release sha256 won't match; skip checksum validation here (it is
+          # enforced when packaging a real release).
+          su builder -c "cd $GITHUB_WORKSPACE/packaging/arch && makepkg --noconfirm --skipchecksums"
 
   nix:
     name: Nix (buildGoModule)
