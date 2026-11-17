@@ -11,7 +11,7 @@ depends=()
 makedepends=('go')
 optdepends=('voacapl: point-to-point HF propagation forecasts (requires the itshfbc data)')
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('abce0bfe718f6bf59f8099013e8eb1f69aa86679e78a8431a6fab92683799125')
+sha256sums=('7fd1afe375299808bde9932e933c5d932552c28e8ecb490fb2bf714aff330065')
 
 build() {
   cd "${pkgname}-${pkgver}"
