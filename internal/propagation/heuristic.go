@@ -126,11 +126,13 @@ func (h *Heuristic) Predict(ctx context.Context, p Params) (*Prediction, error) 
 	if !ok {
 		pred.LinkQuality = neutralHFScore(dist, freqMHz, cond)
 		pred.Note = "MUF unavailable (no ionosonde data); distance-based estimate"
+		applyGroundwaveFloor(pred, dist, freqMHz)
 		return pred, nil
 	}
 	pred.MUF = muf
 	pred.BandOpen = freqMHz <= muf
 	pred.LinkQuality = hfScore(freqMHz, muf, dist, cond)
+	applyGroundwaveFloor(pred, dist, freqMHz)
 	return pred, nil
 }
 
@@ -210,7 +212,18 @@ func hfScore(freqMHz, mufMHz, distKm float64, c Conditions) int {
 	distFactor := 1.0
 	switch {
 	case distKm < 100:
-		distFactor = 0.7 // skip zone / ground wave
+		// Groundwave/NVIS. Low bands are strong close in; high bands are in
+		// the skip zone, where only weak groundwave is available.
+		switch {
+		case freqMHz <= 10.5:
+			distFactor = 1.0
+		case freqMHz <= 14.5:
+			distFactor = 0.8
+		case freqMHz <= 21.5:
+			distFactor = 0.6
+		default:
+			distFactor = 0.45
+		}
 	case distKm > 4000:
 		distFactor = 0.7
 	case distKm > 2000:

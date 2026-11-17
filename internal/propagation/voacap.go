@@ -194,16 +194,31 @@ func toPrediction(r io.Reader, params Params) (*Prediction, error) {
 
 	from := Point{Lat: params.FromLat, Lon: params.FromLon}
 	to := Point{Lat: params.ToLat, Lon: params.ToLon}
+	dist := DistanceKm(from, to)
+	freqMHz := params.FrequencyHz / 1e6
+
+	// Short paths are groundwave/NVIS, where VOACAP's skywave statistics
+	// under-report reliability. Use its LQI as a floor, never a ceiling.
+	skyLQI := lqi
+	open := rel >= 0.5
+	note := fmt.Sprintf("VOACAP LQI %d (reliability %.0f%%, SNR %.0f dB)", skyLQI, rel*100, snr)
+	if gw := GroundwaveScore(dist, freqMHz); gw > lqi {
+		lqi = gw
+		open = true
+		note = fmt.Sprintf(
+			"VOACAP LQI %d, raised to %d%% for short-path groundwave/NVIS (reliability %.0f%%, SNR %.0f dB)",
+			skyLQI, lqi, rel*100, snr)
+	}
 
 	return &Prediction{
 		LinkQuality:  lqi,
 		SNRdB:        snr,
-		BandOpen:     rel >= 0.5,
-		FrequencyMHz: params.FrequencyHz / 1e6,
-		DistanceKm:   DistanceKm(from, to),
+		BandOpen:     open,
+		FrequencyMHz: freqMHz,
+		DistanceKm:   dist,
 		BearingDeg:   BearingDeg(from, to),
 		Method:       "voacap",
-		Note:         fmt.Sprintf("VOACAP (reliability %.0f%%)", rel*100),
+		Note:         note,
 	}, nil
 }
 

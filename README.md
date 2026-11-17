@@ -118,6 +118,12 @@ one and falling back gracefully:
    prefers VOACAP when configured and automatically falls back to the
    heuristic when it is unavailable or errors.
 
+Close-in HF paths (a few to a few dozen km) are groundwave/NVIS, not long-haul
+skywave, so skywave statistics such as MUFday under-report them. Both
+predictors apply a band-aware groundwave/NVIS floor for these distances: low
+bands (80/60/40 m) score in the high 90s, while high bands (20 m and up) stay
+low because their groundwave is weak and they are in the skip zone.
+
 The rank endpoint (`POST /api/rank`) accepts `{grid, band, mode, service_code}`
 and returns stations sorted by predicted link quality, with distance, bearing,
 band-open status, and MUF.
