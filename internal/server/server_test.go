@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -759,5 +760,77 @@ func TestRankPerClientGate(t *testing.T) {
 	s.handleRank(rec, req)
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("second concurrent rank = %d, want 429", rec.Code)
+	}
+}
+
+func TestServiceCodeRefreshCoalesced(t *testing.T) {
+	dir := t.TempDir()
+	loader := cmsapi.NewLoader(dir, []string{"PUBLIC"}, 48, "test")
+	heur := propagation.NewHeuristic(dir)
+	s := New(Config{Version: "test", DesktopMode: true, ServiceCodesPath: filepath.Join(dir, "codes.json")},
+		fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}, loader, heur)
+	s.codeChangeMinInterval = 0
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	s.refreshCodes = func(context.Context) error {
+		close(started)
+		<-release
+		close(done)
+		return nil
+	}
+
+	post := func(body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/servicecodes/config", strings.NewReader(body))
+		req.Host = "127.0.0.1:1234"
+		req.Header.Set("Origin", "http://127.0.0.1:1234")
+		req.Header.Set("Content-Type", "application/json")
+		s.Handler().ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := post(`{"add":"MERCURY"}`); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"refresh":"started"`) {
+		t.Fatalf("first POST = %d %s", rec.Code, rec.Body.String())
+	}
+	<-started
+	if rec := post(`{"add":"VARDEFM"}`); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "already running") {
+		t.Fatalf("coalesced POST = %d %s", rec.Code, rec.Body.String())
+	}
+	close(release)
+	<-done
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestTileHandlerEviction(t *testing.T) {
+	dir := t.TempDir()
+	s := newTestServer(t, nil)
+	s.cfg.TileCacheDir = dir
+	s.cfg.TileURL = "https://tiles.example/{z}/{x}/{y}.png"
+	s.tileMaxBytes = 1000
+	s.tileBytes = 0
+	payload := make([]byte, 400)
+	copy(payload, "\x89PNG")
+	s.tileClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(payload)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+	for x := 0; x < 6; x++ {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/tiles/3/%d/0.png", x), nil)
+		req.RemoteAddr = "192.0.2.1:1234"
+		s.handleTiles(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("tile %d = %d %s", x, rec.Code, rec.Body.String())
+		}
+	}
+	if got := dirSize(dir); got > s.tileMaxBytes {
+		t.Fatalf("tile cache size = %d, over quota %d", got, s.tileMaxBytes)
 	}
 }
