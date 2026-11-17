@@ -55,11 +55,7 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-.brand { display: flex; align-items: center; gap: 10px; }
-.logo { font-size: 22px; color: var(--accent); line-height: 1; }
-.brand-text { display: flex; flex-direction: column; line-height: 1.1; }
-.name { font-weight: 700; font-size: 15px; }
-.tag { font-size: 11px; color: var(--text-dim); }
+.brand { font-weight: 700; font-size: 15px; white-space: nowrap; }
 
 .controls {
   display: flex;
