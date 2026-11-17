@@ -5,9 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -30,6 +33,7 @@ type Config struct {
 	VOACAPExecutable string
 	VOACAPDataDir    string
 	TileURL          string
+	TileCacheDir     string
 }
 
 // Server serves the web UI and JSON API.
@@ -48,6 +52,8 @@ type Server struct {
 	// assetVersion is a short content hash of the mutable web assets, used to
 	// cache-bust app.js/style.css behind a CDN.
 	assetVersion string
+
+	tileClient *http.Client
 }
 
 func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heuristic) *Server {
@@ -74,6 +80,7 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 		ranker:        &propagation.Ranker{Predictors: predictors},
 		voacapEnabled: voacapEnabled,
 		assetVersion:  assetVersion(web),
+		tileClient:    &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -115,6 +122,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/conditions", s.handleConditions)
 	mux.HandleFunc("/api/rank", s.handleRank)
 	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/tiles/", s.handleTiles)
 
 	fileServer := http.FileServer(http.FS(s.web))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -229,16 +237,107 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"service_codes": s.cfg.ServiceCodes,
 		"mode_swaps":    s.cfg.ModeSwaps,
 		"voacap":        s.voacapEnabled,
-		"tile_url":      tileURL(s.cfg.TileURL),
+		"tile_url":      proxyTilePath,
 	})
 }
 
-// tileURL returns the configured tile template, defaulting to keyless OSM.
-func tileURL(s string) string {
-	if s == "" {
-		return "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+// proxyTilePath is the same-origin tile endpoint the browser uses; the server
+// proxies and caches tiles from the configured upstream.
+const proxyTilePath = "/tiles/{z}/{x}/{y}.png"
+
+// defaultTileUpstream is a keyless OSM tile template.
+const defaultTileUpstream = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+
+// handleTiles fetches a tile from the upstream once (with a proper
+// User-Agent), caches it on disk, and serves it. The browser never talks to the
+// tile server directly, which avoids browser-side 403s and lets previously
+// viewed areas work offline.
+func (s *Server) handleTiles(w http.ResponseWriter, r *http.Request) {
+	z, x, y, ok := parseTilePath(r.URL.Path)
+	if !ok || z < 0 || z > 19 {
+		http.Error(w, "invalid tile path", http.StatusBadRequest)
+		return
 	}
-	return s
+	if n := 1 << z; x < 0 || x >= n || y < 0 || y >= n {
+		http.Error(w, "invalid tile coordinates", http.StatusBadRequest)
+		return
+	}
+
+	cachePath := filepath.Join(s.cfg.TileCacheDir, strconv.Itoa(z), strconv.Itoa(x), strconv.Itoa(y)+".png")
+	if b, err := os.ReadFile(cachePath); err == nil && len(b) > 0 {
+		serveTile(w, b)
+		return
+	}
+
+	upstream := s.cfg.TileURL
+	if upstream == "" {
+		upstream = defaultTileUpstream
+	}
+	u := strings.NewReplacer(
+		"{z}", strconv.Itoa(z),
+		"{x}", strconv.Itoa(x),
+		"{y}", strconv.Itoa(y),
+		"{s}", "a",
+		"{r}", "",
+	).Replace(upstream)
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
+	if err != nil {
+		http.Error(w, "tile upstream error", http.StatusBadGateway)
+		return
+	}
+	req.Header.Set("User-Agent", "open-rmslist/"+s.cfg.Version+" (self-hosted Winlink RMS map)")
+	req.Header.Set("Accept", "image/png,image/*;q=0.8")
+	resp, err := s.tileClient.Do(req)
+	if err != nil {
+		http.Error(w, "tile upstream error", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "tile upstream error", http.StatusBadGateway)
+		return
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil || len(b) == 0 {
+		http.Error(w, "tile upstream error", http.StatusBadGateway)
+		return
+	}
+	if s.cfg.TileCacheDir != "" {
+		_ = os.MkdirAll(filepath.Dir(cachePath), 0o755)
+		tmp := cachePath + ".tmp"
+		if os.WriteFile(tmp, b, 0o644) == nil {
+			_ = os.Rename(tmp, cachePath)
+		}
+	}
+	serveTile(w, b)
+}
+
+func serveTile(w http.ResponseWriter, b []byte) {
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write(b)
+}
+
+// parseTilePath parses "/tiles/{z}/{x}/{y}.png" (integers only).
+func parseTilePath(p string) (z, x, y int, ok bool) {
+	p = strings.TrimPrefix(p, "/tiles/")
+	p = strings.TrimSuffix(p, ".png")
+	parts := strings.Split(p, "/")
+	if len(parts) != 3 {
+		return 0, 0, 0, false
+	}
+	var err error
+	if z, err = strconv.Atoi(parts[0]); err != nil {
+		return 0, 0, 0, false
+	}
+	if x, err = strconv.Atoi(parts[1]); err != nil {
+		return 0, 0, 0, false
+	}
+	if y, err = strconv.Atoi(parts[2]); err != nil {
+		return 0, 0, 0, false
+	}
+	return z, x, y, true
 }
 
 // rankedEntry is one (station, channel) candidate in a ranked result.

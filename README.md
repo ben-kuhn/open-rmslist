@@ -74,7 +74,7 @@ open <http://localhost:8079> yourself (or pass `-open-browser`).
 | `-voacap-download-dir` | `OPENRMSLIST_VOACAP_DOWNLOAD_DIR` | *user cache* | Extract directory for the downloaded VOACAP distribution |
 | `-voacap-download-sha256` | `OPENRMSLIST_VOACAP_DOWNLOAD_SHA256` | *(empty)* | Optional SHA-256 of the distribution archive |
 | `-web-dir` | `OPENRMSLIST_WEB_DIR` | *(embedded)* | Serve web assets from a directory instead |
-| `-tile-url` | `OPENRMSLIST_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tile template (OSM; point at a local tile server for offline use) |
+| `-tile-url` | `OPENRMSLIST_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Upstream tile template; proxied and disk-cached by the server |
 | `-open-browser` | `OPENRMSLIST_OPEN_BROWSER` | macOS/Windows: `true`, else `false` | Open the browser on start |
 
 ### Mode swaps

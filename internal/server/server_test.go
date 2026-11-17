@@ -25,6 +25,7 @@ func newTestServer(t *testing.T, stations []catalog.Station) *Server {
 		Version:      "test",
 		ServiceCodes: []string{"PUBLIC"},
 		ModeSwaps:    catalog.DefaultModeSwaps,
+		TileCacheDir: t.TempDir(),
 	}, fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte(`<link rel="stylesheet" href="style.css"><script src="app.js"></script>`)},
 		"app.js":     &fstest.MapFile{Data: []byte("//app")},
@@ -272,5 +273,54 @@ func TestServeIndexVersioned(t *testing.T) {
 	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
 		t.Errorf("Cache-Control = %q, want no-cache", got)
+	}
+}
+
+func TestHandleTiles(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("PNGDATA"))
+	}))
+	defer upstream.Close()
+
+	s := newTestServer(t, nil)
+	s.cfg.TileURL = upstream.URL + "/{z}/{x}/{y}.png"
+
+	rec := httptest.NewRecorder()
+	s.handleTiles(rec, httptest.NewRequest(http.MethodGet, "/tiles/2/1/1.png", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "PNGDATA" {
+		t.Fatalf("first request: %d %q", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/png" {
+		t.Errorf("Content-Type = %q", got)
+	}
+
+	// With the upstream stopped, the tile must still be served from disk cache.
+	upstream.Close()
+	rec = httptest.NewRecorder()
+	s.handleTiles(rec, httptest.NewRequest(http.MethodGet, "/tiles/2/1/1.png", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "PNGDATA" {
+		t.Fatalf("cached request: %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleTilesBadPath(t *testing.T) {
+	s := newTestServer(t, nil)
+	for _, p := range []string{"/tiles/2/1.png", "/tiles/x/1/1.png", "/tiles/2/-1/1.png", "/tiles/2/999/999.png", "/tiles/../etc/passwd"} {
+		rec := httptest.NewRecorder()
+		s.handleTiles(rec, httptest.NewRequest(http.MethodGet, p, nil))
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", p, rec.Code)
+		}
+	}
+}
+
+func TestParseTilePath(t *testing.T) {
+	z, x, y, ok := parseTilePath("/tiles/3/4/5.png")
+	if !ok || z != 3 || x != 4 || y != 5 {
+		t.Errorf("parseTilePath = %d,%d,%d,%v", z, x, y, ok)
+	}
+	if _, _, _, ok := parseTilePath("/tiles/3/4/5/6.png"); ok {
+		t.Error("expected invalid for too many parts")
 	}
 }
