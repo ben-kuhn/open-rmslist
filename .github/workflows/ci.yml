@@ -40,16 +40,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { goos: linux,   goarch: amd64 }
-          - { goos: linux,   goarch: arm64 }
-          - { goos: linux,   goarch: arm }
-          - { goos: darwin,  goarch: amd64 }
-          - { goos: darwin,  goarch: arm64 }
-          - { goos: windows, goarch: amd64 }
-          - { goos: windows, goarch: arm64 }
-          - { goos: freebsd, goarch: amd64 }
-          - { goos: openbsd, goarch: amd64 }
-          - { goos: netbsd,  goarch: amd64 }
+          - { goos: linux,   goarch: amd64, artos: linux }
+          - { goos: linux,   goarch: arm64, artos: linux }
+          - { goos: linux,   goarch: arm,   artos: linux }
+          - { goos: darwin,  goarch: amd64, artos: macos }
+          - { goos: darwin,  goarch: arm64, artos: macos }
+          - { goos: windows, goarch: amd64, artos: windows }
+          - { goos: windows, goarch: arm64, artos: windows }
+          - { goos: freebsd, goarch: amd64, artos: freebsd }
+          - { goos: openbsd, goarch: amd64, artos: openbsd }
+          - { goos: netbsd,  goarch: amd64, artos: netbsd }
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
@@ -63,12 +63,12 @@ jobs:
         run: |
           mkdir -p dist
           go build -trimpath -ldflags "-s -w" \
-            -o "dist/rms-radar-web-${{ matrix.goos }}-${{ matrix.goarch }}" .
+            -o "dist/rms-radar-web-${{ matrix.artos }}-${{ matrix.goarch }}" .
       - name: upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rms-radar-web-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/rms-radar-web-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: rms-radar-web-${{ matrix.artos }}-${{ matrix.goarch }}
+          path: dist/rms-radar-web-${{ matrix.artos }}-${{ matrix.goarch }}
 
   desktop:
     name: Desktop build (${{ matrix.os }})

@@ -10,7 +10,7 @@
 # local build provides it.
 
 Name:           rms-radar
-Version:        0.2.0
+Version:        0.2.1
 Release:        1%{?dist}
 Summary:        Winlink RMS gateway map with service-code filtering and propagation ranking
 
@@ -51,7 +51,7 @@ go build -trimpath -ldflags "-s -w -X main.version=%{version}" -o rms-radar .
 
 %install
 install -Dm755 rms-radar %{buildroot}%{_bindir}/rms-radar
-install -Dm644 contrib/systemd/rms-radar.service %{buildroot}%{_unitdir}/rms-radar.service
+install -Dm644 packaging/common/rms-radar.service %{buildroot}%{_unitdir}/rms-radar.service
 install -Dm644 contrib/desktop/rms-radar.desktop %{buildroot}%{_datadir}/applications/rms-radar.desktop
 
 %files
@@ -71,6 +71,8 @@ install -Dm644 contrib/desktop/rms-radar.desktop %{buildroot}%{_datadir}/applica
 %systemd_postun rms-radar.service
 
 %changelog
+* Tue Nov 17 2026 RMS Radar contributors - 0.2.1-1
+- Linux packages (.deb/.rpm/Arch), consumer docs, MODEM73/DATA2G
 * Tue Nov 17 2026 RMS Radar contributors - 0.2.0-1
 - Rename to RMS Radar; native desktop build; gateway setup guide
 * Mon Nov 16 2026 RMS Radar contributors - 0.1.0-1

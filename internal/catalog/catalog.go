@@ -16,6 +16,16 @@ import (
 var CommunityModems = map[string]string{
 	"MERCURY": "Mercury",
 	"VARDEFM": "VardeFM",
+	"MODEM73": "Modem73",
+	"DATA2G":  "Data2G",
+}
+
+// dedicatedModemCodes are service codes whose whole purpose is the modem
+// itself, so the label replaces the protocol name even when it is not VARA
+// (for example MODEM73's "Packet 2400" becomes "Modem73 2400").
+var dedicatedModemCodes = map[string]bool{
+	"MODEM73": true,
+	"DATA2G":  true,
 }
 
 // Channel is a normalized, display-ready channel. Mode is the label to show;
@@ -112,7 +122,12 @@ func communityMode(serviceCode, mode string) string {
 		return mode
 	}
 	fields := strings.Fields(mode)
-	if len(fields) == 0 || !strings.EqualFold(fields[0], "VARA") {
+	if len(fields) == 0 {
+		return mode
+	}
+	if !dedicatedModemCodes[serviceCode] && !strings.EqualFold(fields[0], "VARA") {
+		// MERCURY/VARDEFM are also used for ordinary (non-VARA) channels;
+		// leave those modes alone. Dedicated project codes replace any mode.
 		return mode
 	}
 	rest := fields[1:]
@@ -136,6 +151,10 @@ func modeFamily(mode string) string {
 		return "Mercury"
 	case strings.HasPrefix(m, "VARDEFM"):
 		return "VardeFM"
+	case strings.HasPrefix(m, "MODEM73"):
+		return "Modem73"
+	case strings.HasPrefix(m, "DATA2G"):
+		return "Data2G"
 	case strings.HasPrefix(m, "ARDOP"):
 		return "ARDOP"
 	case strings.HasPrefix(m, "PACKET"):

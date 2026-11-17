@@ -32,7 +32,9 @@ for t in "${targets[@]}"; do
   read -r goos goarch <<<"$t"
   ext=""
   [ "$goos" = "windows" ] && ext=".exe"
-  name="rms-radar-web-${VERSION}-${goos}-${goarch}"
+  artos="$goos"
+  [ "$goos" = "darwin" ] && artos="macos"
+  name="rms-radar-web-${VERSION}-${artos}-${goarch}"
 
   echo "==> ${name}"
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \

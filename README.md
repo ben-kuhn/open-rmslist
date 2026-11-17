@@ -1,351 +1,115 @@
 # RMS Radar
 
-A minimal, secure, self-hostable web map of Winlink RMS gateways — built for
-the community of operators running non-VARA modems (Mercury, VardeFM, and
-friends) under Winlink **service codes**.
-
-It periodically refreshes the live Winlink gateway list, maps stations on
-OpenStreetMap, lets you filter by service code / band / mode, and ranks
-stations by predicted link success using current propagation conditions.
-
-- **Dark mode (default) and light mode**
-- **Mobile-friendly** — on narrow screens, Map/List tabs keep the map visible and the gateway list scrolls in its own pane
-- **Native desktop app** — `rms-radar-desktop` opens a real window
-  (WKWebView / WebView2 / WebKitGTK); closing the window quits. The
-  `rms-radar` binary is the headless server, with a browser fallback and
-  `-d` for services
-- **Service-code dropdown** populated from the fetched gateway list
-- **Service-code aware** — gateways are shown and filtered by the Winlink
-  service code the API returns (`PUBLIC`, `EMCOMM`, `MERCURY`, `VARDEFM`, …);
-  community-modem channels are labelled with the service name (Mercury,
-  VardeFM), while other codes show the reported mode
-- **Setup guides** — static pages explain how to add service codes in Winlink
-  clients and how to publish them from RMS Trimode and BPQ32/LinBPQ gateways
-- **Propagation ranking** — pick your grid, band, and mode; stations are
-  scored and highlighted by predicted link quality. While ranking, 0% VHF/UHF
-  paths are hidden as implausible. HF stations are kept regardless of score.
-- **Offline-tolerant** — caches the gateway list and propagation data, with an
-  embedded snapshot fallback
-
----
-
-## Why
-
-The Winlink gateway list advertises community modems by their *VARA-compatible*
-API: a Mercury HF modem is listed as `VARA`, a VardeFM modem as `VARA FM`, and
-the real identity is carried in the service code (`MERCURY`, `VARDEFM`, …).
-Rather than matching mode strings, RMS Radar uses the service code: a
-channel whose service code names a community modem is shown under that name
-(Mercury, VardeFM), while everything else keeps the advertised mode. The raw
-API mode stays available as a hover hint and in the `raw_mode` field.
-
-## Data source
-
-The gateway list comes from the same public endpoint the open-source
-[Pat](https://github.com/la5nta/pat) Winlink client uses:
-
-This endpoint returns per-gateway latitude/longitude and per-channel
-`ServiceCode`, `SupportedModes`, frequency, and grid square.
-
-## Quick start
-
-The default build is the CGO-free **web/server** binary:
-
-```bash
-go build -o rms-radar .
-./rms-radar              # browser mode: opens the map; closing the tab quits
-```
-
-The default is **browser desktop mode** on every platform: the app starts a local
-server, opens your default browser, and exits when the last browser tab for it
-closes. For a headless service that stays running:
-
-```bash
-./rms-radar -d           # service mode: no browser, no auto-exit
-./rms-radar -d -listen 0.0.0.0:8079
-```
-
-### Native desktop window
-
-`rms-radar-desktop` embeds the same UI in a native window instead of a browser.
-It requires CGo and the platform webview runtime:
-
-- **Linux:** `libwebkit2gtk-4.1-dev` and `libgtk-3-dev` (the build script adds a
-  `webkit2gtk-4.0` compatibility shim automatically)
-- **macOS:** Xcode command-line tools (WKWebView is built in)
-- **Windows:** MinGW-w64 and the WebView2 runtime
-
-```bash
-./scripts/build-desktop.sh     # native artifact in dist-desktop/
-```
-
-or build it directly:
-
-```bash
-CGO_ENABLED=1 go build -tags desktop -o rms-radar-desktop .
-```
-
-Closing the window quits the process; there is no browser tab or heartbeat
-heuristic involved. The desktop binary accepts the same data/propagation flags,
-plus `-debug` for webview developer tools.
-
-### Configuration
-
-| Flag | Env | Default | Description |
-|------|-----|---------|-------------|
-| `-listen` | `RMSRADAR_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
-| `-service-codes` | `RMSRADAR_SERVICE_CODES` | `PUBLIC,EMCOMM,MERCURY,VARDEFM` | Comma-separated service codes to fetch (no wildcard) |
-| `-refresh` | `RMSRADAR_REFRESH` | `1h` | Gateway list refresh interval |
-| `-cache-dir` | `RMSRADAR_CACHE_DIR` | `./data` | Cache directory |
-| `-key` | `RMSRADAR_KEY` | Pat's community key | Winlink CMS access key |
-| `-history-hours` | `RMSRADAR_HISTORY_HOURS` | `48` | Channel history (1–48) |
-| `-voacap-url` | `RMSRADAR_VOACAP_URL` | *(empty)* | Optional remote VOACAP API base URL (enables forecasts) |
-| `-voacap-executable` | `RMSRADAR_VOACAP_EXECUTABLE` | *(empty)* | Path to a local `voacapl`/`voacapw` binary (enables forecasts) |
-| `-voacap-data-dir` | `RMSRADAR_VOACAP_DATA_DIR` | *(auto)* | ITSHFBC data directory for the local VOACAP binary |
-| `-voacap-download-url` | `RMSRADAR_VOACAP_DOWNLOAD_URL` | *(empty)* | Download a VOACAP distribution (binary + data) from this URL |
-| `-voacap-download-dir` | `RMSRADAR_VOACAP_DOWNLOAD_DIR` | *user cache* | Extract directory for the downloaded VOACAP distribution |
-| `-voacap-download-sha256` | `RMSRADAR_VOACAP_DOWNLOAD_SHA256` | *(empty)* | Optional SHA-256 of the distribution archive |
-| `-web-dir` | `RMSRADAR_WEB_DIR` | *(embedded)* | Serve web assets from a directory instead |
-| `-tile-url` | `RMSRADAR_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Upstream tile template; proxied and disk-cached by the server |
-| `-vhf-max-range` | `RMSRADAR_VHF_MAX_RANGE` | `400` | Max plausible VHF/UHF path (km) for ranking — distance-based, not continent-based; set large to disable |
-| `-d`, `-daemon` | `RMSRADAR_DAEMON` | `false` | Service mode: do not open a browser and never auto-exit |
-| `-open-browser` | `RMSRADAR_OPEN_BROWSER` | `true` | Open the web UI in the default browser on start (browser desktop mode) |
-
-The native `rms-radar-desktop` binary accepts the same data/propagation flags
-plus `-debug` for webview developer tools; it has no `-d`/`-open-browser` because
-closing its window always quits.
-
-### Desktop mode vs service mode
-
-| | Desktop (default) | `-d` / `--daemon` |
-|---|---|---|
-| Opens the browser | yes | no |
-| Exits when the UI closes | yes (after the last tab, ~15 s grace) | never |
-| Quit button in the UI | yes | no |
-| Intended for | double-click / local use | systemd, NixOS, containers |
-
-Desktop mode generates a random local token and opens `/?desktop=<token>`. The
-page checks in every few seconds; closing the tab sends a beacon, and the process
-exits after a short grace so reloads and multiple tabs are safe. The **Quit**
-button exits immediately. The desktop endpoints are token-guarded and disabled
-entirely in service mode.
-
-### Service codes
-
-The service-code dropdown is built from the codes present in the fetched data,
-and the mode dropdown shows the modes those channels advertise. Community-modem
-codes are labelled with the service name: `MERCURY` channels show as **Mercury**
-and `VARDEFM` channels as **VardeFM**, even though the API advertises them as
-`VARA`. Other codes (`PUBLIC`, `EMCOMM`, private groups) keep the reported mode.
-The API's raw mode is preserved in `raw_mode` and shown as a hover hint.
-
-The Winlink API has no wildcard for service codes, so `-service-codes` lists the
-codes to request. The default is the set the API currently serves:
-
-| Code | Notes |
-|------|-------|
-| `PUBLIC` | maritime and open amateur gateways |
-| `EMCOMM` | emergency gateways that do not allow public access |
-| `MERCURY` | Mercury HF gateways |
-| `VARDEFM` | VardeFM gateways |
-
-Add any private group code you are entitled to with
-`-service-codes PUBLIC,MYGROUP` (or `RMSRADAR_SERVICE_CODES`); codes with no
-gateways simply contribute nothing.
-
-A per-client setup guide is served at `/clients.html` (source:
-`web/clients.html`), covering Winlink Express, PAT, WoAD, RadioMail, and
-HTCommander. A gateway guide at `/gateway.html` (source: `web/gateway.html`)
-covers RMS Trimode and BPQ32/LinBPQ, including the one-frequency/mode report
-caveat.
-
-## Propagation
-
-RMS Radar estimates link success two ways, preferring the more accurate
-one and falling back gracefully:
-
-1. **Heuristic (always available)** — real-time ionosonde `foF2`/MUF from
-   [prop.kc2g.com](https://prop.kc2g.com) plus solar indices (SFI/A/K) from
-   [hamqsl.com](https://www.hamqsl.com), combined with great-circle distance
-   and the gateway's advertised radio range. The last-known conditions are
-   cached to disk, so ranking still works offline (marked as stale).
-2. **VOACAP (optional, point-to-point forecast)** — a port of Pat's
-   MIT-licensed VOACAP encoder/parser and Link Quality Index (LQI) scoring. Two
-   engines are supported: a **remote VOACAP API** (`-voacap-url`) or a **local
-   `voacapl`/`voacapw` binary with ITSHFBC data** (`-voacap-executable` /
-   `-voacap-data-dir`). The LQI combines path reliability, SNR, takeoff angle,
-   MUFday, propagation mode (hops/layer), and signal power into a 0–100 score.
-   The smoothed sunspot number (SSN) input comes from the current hamqsl daily
-   sunspot count (Pat uses a SILSO smoothed-SSN forecast instead). The ranker
-   prefers VOACAP when configured and automatically falls back to the
-   heuristic when it is unavailable or errors.
-
-Close-in HF paths (a few to a few dozen km) are groundwave/NVIS, not long-haul
-skywave, so skywave statistics such as MUFday under-report them. Both
-predictors apply a band-aware groundwave/NVIS floor for these distances: low
-bands (80/60/40 m) score in the high 90s, while high bands (20 m and up) stay
-low because their groundwave is weak and they are in the skip zone.
-
-The rank endpoint (`POST /api/rank`) accepts `{grid, band, mode, service_code}`
-and returns stations sorted by predicted link quality, with distance, bearing,
-band-open status, and MUF. When ranking across multiple bands or modes, each
-station row shows the band and mode that produced its best score, and that
-channel is highlighted.
-
-## Installing VOACAP (optional)
-
-Point-to-point forecasts use an external VOACAP engine. RMS Radar is MIT;
-the engine it shells out to is a separate program with its own permissive
-terms: the core VOACAP prediction code is U.S. Government public domain
-(NTIA/ITS), the `voacapl` Linux port (J.A. Watson) is CC0, and its `itshfbc`
-coefficient data is freely redistributable (Debian ships it as `voacapl-data`).
-Because it is exec'd rather than linked, there is no combined-work license
-question.
-
-Install it with your package manager, then either let RMS Radar find it on
-`PATH` or point at it explicitly:
-
-- **Debian/Ubuntu:** `sudo apt install voacapl voacapl-data`
-- **Arch:** install `voacapl` from the AUR
-- **Fedora/NixOS:** build from [jawatson/voacapl](https://github.com/jawatson/voacapl)
-  or use the `nix-ham-packages` `voacapl` package
-
-```bash
-./rms-radar -voacap-executable "$(command -v voacapl)"
-```
-
-`-voacap-data-dir` is only needed if the `itshfbc` data lives somewhere
-non-standard; on Linux it auto-detects a read-only data directory (voacapl runs
-with `--run-dir`).
-
-### Auto-downloading VOACAP (macOS / Windows)
-
-On platforms without a package manager, RMS Radar can fetch and extract a
-VOACAP distribution for you:
-
-```bash
-./rms-radar -voacap-download-url https://example.com/voacap-macos.tar.gz
-```
-
-Point `-voacap-download-url` at a `.zip`, `.tar.gz`, `.tgz`, or `.tar`
-containing the `voacapl`/`voacapw` binary and its `itshfbc` data. The archive is
-extracted to `-voacap-download-dir`, the engine and data directory are located
-automatically, and the resulting paths are used. Supply `-voacap-download-sha256`
-to verify the archive before extracting.
-
-This is strictly opt-in (nothing downloads unless you set a URL), and
-downloading + executing a third-party binary is a trust decision you make by
-configuring it.
-
-## API
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/health` | Service status, data source, station count |
-| `GET /api/gateways` | Normalized stations + channels (cached) |
-| `GET /api/servicecodes` | Distinct service codes present in the data |
-| `GET /api/conditions` | Current solar + MUF summary |
-| `POST /api/rank` | Ranked stations for a grid/band/mode |
-| `GET /api/config` | Service codes, version, VOACAP status, tile URL |
-
-## Platform support & packaging
-
-First-class targets (CI builds all of them, static binaries via
-`CGO_ENABLED=0`):
-
-- **Linux** — `amd64`, `arm64`, `arm`
-- **macOS** — `amd64`, `arm64`
-- **Windows** — `amd64`, `arm64`
-- **FreeBSD / OpenBSD / NetBSD** — `amd64` (build support)
-
-Packaging included:
-
-- **systemd unit** — `contrib/systemd/rms-radar.service` (runs with `-d`)
-- **Arch** — `packaging/arch/PKGBUILD`
-- **Nix / NixOS** — see the sibling
-  [`nix-ham-packages`](https://github.com/ben-kuhn/nix-ham-packages) overlay
-  (`pkgs.rms-radar` + `services.rms-radar` module, `-d` by default)
-
-### Release artifacts
-
-Two packages are published:
-
-- **Web/server** — `rms-radar-web-<version>-<os>-<arch>` (CGO-free; the
-  Arch/RPM/Nix service packages install it as `rms-radar`).
-- **Desktop** — `rms-radar-desktop-<version>-<os>-<arch>` with a native window:
-  - **macOS** — the `…-app.zip` contains `RMS Radar.app`. The bundle is unsigned;
-    on first launch use right-click → **Open**, or run
-    `xattr -dr com.apple.quarantine "RMS Radar.app"`.
-  - **Windows** — a `.zip` with a GUI-subsystem `.exe` (no console window).
-  - **Linux** — a `.tar.gz` with an `rms-radar-desktop.desktop` launcher. The
-    system needs WebKitGTK 4.1 installed (`libwebkit2gtk-4.1-0`).
-
-### Desktop GUI options
-
-The desktop build uses a native webview (the same C/C++ webview library as
-[`webview/webview`](https://github.com/webview/webview)): WKWebView on macOS,
-WebView2 on Windows, WebKitGTK 4.1 on Linux. Closing the window is a real quit;
-no browser, tab, or heartbeat heuristic is involved. The trade-off is CGo plus
-per-OS SDK/runtime dependencies for that build only — the web/server binary
-remains CGO-free and dependency-free at runtime.
-
-Alternatives if the native build is not a fit:
-
-1. **Browser mode** — `rms-radar` opens the default browser and exits when
-   the last tab closes (plus a Quit button). Zero build dependencies.
-2. **System tray wrapper** — `fyne.io/systray` / `getlantern/systray` with
-   Open/Quit items; the UI stays in the browser. Good for Linux/Windows, but
-   closing the browser is not the same as quitting.
-3. **App-mode browser window** — launch Chromium-based browsers with
-   `--app=http://127.0.0.1:8079` for a chromeless window, keeping the beacon
-   exit. Small change, browser-dependent.
-
-### CI/CD
-
-- `.github/workflows/ci.yml` — vet, test, cross-compile the web targets, and
-  build the native desktop binary on Linux/macOS/Windows runners on push/PR.
-- `.github/workflows/release.yml` — on a `v*` tag, build and package the web
-  artifacts (`scripts/build-release.sh`) and the native desktop artifacts
-  (`scripts/build-desktop.sh`) on native runners, then publish a GitHub Release
-  with combined SHA-256 checksums.
-
-## Offline behavior
-
-1. The gateway list is cached to `-cache-dir`. If the network is unavailable on
-   a later start, the cache is served.
-2. If there is no cache, an embedded snapshot (bundled in the binary) is used.
-3. Propagation conditions are cached too; ranking degrades to a
-   distance/band-based estimate when no ionospheric data is available.
-
-Map tiles are proxied and cached to disk by the server (`<cache-dir>/tiles`),
-so previously viewed areas render offline; new areas require connectivity.
-
-## Security & privacy
-
-RMS Radar is designed as a single-user, self-hosted tool and has **no
-authentication**. Treat it as a LAN/loopback service:
-
-- **Binds to `127.0.0.1:8079` by default.** Pass `-listen 0.0.0.0:8079` (and
-  put it behind a reverse proxy or VPN) only if you intend to expose it.
-- **No auth, no cookies.** The data API is read-only; `/api/rank` only computes
-  predictions. It is still a compute endpoint, so it is capped (500 candidates
-  per request) and time-limited. The only state-changing endpoints are the
-  desktop lifecycle ones (`/api/desktop/*`); they require the random token from
-  the launch URL and are disabled in `-d` service mode.
-- **Security headers** (CSP, `X-Content-Type-Options: nosniff`,
-  `X-Frame-Options`, `Referrer-Policy`) are set on every response, and all
-  third-party gateway data is HTML-escaped before rendering.
-- **Outbound only:** the service fetches the gateway list from
-  `api.winlink.org` and propagation data from `prop.hamqsl.com` /
-  `prop.kc2g.com`, over verified TLS. It makes no inbound connections.
-- **VOACAP auto-download (`-voacap-download-url`) executes a third-party
-  binary.** It is opt-in and off by default. Prefer your OS package manager; if
-  you use the downloader, supply `-voacap-download-sha256` and trust the source
-  you point it at. Archives are size-capped, and extraction rejects
-  path-traversal entries.
-- **Privacy:** gateway data (including the sysop `Comments` field, which may
-  contain contact details) is the same data Winlink publishes publicly. The
-  embedded fallback snapshot is a frozen copy of that public feed.
+**A free, open-source map of Winlink RMS gateways.**
+
+RMS Radar shows the Winlink gateways near you on a map, lets you filter by the
+service codes you care about, and ranks them by how likely you are to reach
+them. It runs as a normal desktop app on macOS, Windows, and Linux — no server
+or command line required — and can also be self-hosted for a club or network.
+
+> **Unofficial.** RMS Radar is not affiliated with the Winlink Development Team
+> or ARSFI. Gateway data comes from Winlink's public API. The official list and
+> map are at [winlink.org/RMSChannels](https://winlink.org/RMSChannels).
+
+## Download
+
+Get the latest version from the
+**[RMS Radar releases page](https://github.com/ben-kuhn/rms-radar/releases/latest)**.
+
+### macOS
+
+1. Download `rms-radar-desktop-<version>-macos-arm64-app.zip`.
+2. Unzip it and drag **RMS Radar.app** into **Applications**.
+3. The app is not signed yet, so the first launch needs **right-click → Open**
+   (or run `xattr -dr com.apple.quarantine "RMS Radar.app"` in Terminal).
+
+The desktop app is Apple Silicon (arm64). Intel Mac users can use the
+web/server build or the browser-based launcher.
+
+### Windows
+
+1. Download `rms-radar-desktop-<version>-windows-amd64.zip`.
+2. Unzip it and run `rms-radar-desktop.exe`.
+3. If Windows SmartScreen appears, choose **More info → Run anyway**.
+
+RMS Radar uses Microsoft's WebView2 runtime, which is included with Windows 10
+and 11. If it is missing, install the
+[WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
+
+### Linux
+
+- **Debian / Ubuntu:** download `rms-radar-desktop_<version>_amd64.deb`, then:
+
+  ```bash
+  sudo apt install ./rms-radar-desktop_<version>_amd64.deb
+  ```
+
+  Launch **RMS Radar** from your applications menu.
+
+- **Any other distribution:** download
+  `rms-radar-desktop-<version>-linux-amd64.tar.gz`, extract it, and run
+  `./rms-radar-desktop`. It needs WebKitGTK 4.1
+  (`libwebkit2gtk-4.1-0` on Debian/Ubuntu, `webkit2gtk-4.1` on Arch/Fedora).
+
+- **NixOS:** use the
+  [`nix-ham-packages`](https://github.com/ben-kuhn/nix-ham-packages) overlay.
+
+Self-hosting the web version? See [SELF-HOSTING.md](SELF-HOSTING.md) for `.deb`,
+`.rpm`, Arch, and NixOS server packages.
+
+## Using RMS Radar
+
+1. **Enter your grid square** (for example `EM38xx`). Not sure? Use a
+   [Maidenhead locator tool](https://www.levinecentral.com/ham/grid_square.php).
+2. **Pick a service code** — `PUBLIC` is the usual open amateur code.
+   `EMCOMM`, `MERCURY`, `VARDEFM`, `MODEM73`, and `DATA2G` are common community
+   codes; other projects and private groups use their own. You can also
+   filter by band and mode.
+3. **Press Rank** to score the gateways by predicted link quality. Each row
+   shows the band and mode that produced its best score.
+4. **Click a gateway** to center it on the map and open its details: frequencies,
+   modes, service codes, and the link estimate.
+5. On a phone, use the **Map** and **List** tabs to switch views.
+
+The map is dark by default; the ◐ button switches to light mode. The gateway
+list and map tiles are cached, so previously viewed areas work offline.
+
+## What it does
+
+- **Maps the live Winlink gateway list** on OpenStreetMap.
+- **Filters by service code** — `PUBLIC`, `EMCOMM`, `MERCURY`, `VARDEFM`, `MODEM73`,
+  `DATA2G`, and any other community or private codes you configure.
+- **Shows the real mode** for every channel. Mercury and VardeFM gateways are
+  labelled from their service code, even though Winlink advertises them as VARA.
+- **Ranks by propagation** — a built-in heuristic works everywhere, and an
+  optional VOACAP engine gives point-to-point HF forecasts.
+- **Hides implausible paths** — 0% VHF/UHF results are dropped while ranking,
+  and very short HF paths get a realistic groundwave/NVIS score.
+- **Runs natively** on macOS, Windows, and Linux, or in any browser when
+  self-hosted.
+
+## Guides
+
+- **[Client setup guide](https://rmsradar.ku0hn.radio/clients.html)** — how to
+  add service codes in Winlink Express, PAT, WoAD, RadioMail, and HTCommander.
+- **[Gateway setup guide](https://rmsradar.ku0hn.radio/gateway.html)** — how to
+  publish service codes from RMS Trimode and BPQ32/LinBPQ, including the
+  one-frequency/mode reporting rule.
+
+Both guides are also served by any self-hosted instance at `/clients.html` and
+`/gateway.html`.
+
+## Self-hosting
+
+Want to run RMS Radar for a club, a net, or a whole LAN? See
+**[SELF-HOSTING.md](SELF-HOSTING.md)** for server packages, `-d` service mode,
+LAN exposure, reverse-proxy notes, the full flag list, the API, VOACAP setup,
+and security details.
+
+## Building from source
+
+See **[BUILDING.md](BUILDING.md)** for the Go build, the native desktop build,
+the test suite, the release scripts, and the distro packaging.
 
 ## License
 

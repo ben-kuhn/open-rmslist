@@ -1,0 +1,22 @@
+[Unit]
+Description=RMS Radar — Winlink gateway map
+Documentation=https://github.com/ben-kuhn/rms-radar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=true
+StateDirectory=rms-radar
+ExecStart=/usr/bin/rms-radar -d -listen 127.0.0.1:8079 -cache-dir /var/lib/rms-radar
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

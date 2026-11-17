@@ -24,6 +24,18 @@ jobs:
           VERSION: ${{ github.ref_name }}
           OUT: dist
         run: ./scripts/build-release.sh
+      - name: build Debian server packages
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VER="${VERSION#v}"
+          for pair in amd64:amd64 arm64:arm64 arm:armhf; do
+            goarch="${pair%%:*}"
+            debarch="${pair##*:}"
+            bin="dist/rms-radar-web-${VER}-linux-${goarch}"
+            [ -f "$bin" ] || { echo "missing $bin" >&2; exit 1; }
+            OUT=dist ./scripts/build-deb.sh "$bin" rms-radar "$VER" "$debarch" web
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: web
@@ -62,14 +74,65 @@ jobs:
           VERSION: ${{ github.ref_name }}
           OUT: dist-desktop
         run: ./scripts/build-desktop.sh
+      - name: build Debian desktop package
+        if: runner.os == 'Linux'
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VER="${VERSION#v}"
+          bin="dist-desktop/rms-radar-desktop-${VER}-linux-amd64"
+          [ -f "$bin" ] || { echo "missing $bin" >&2; exit 1; }
+          OUT=dist-desktop ./scripts/build-deb.sh "$bin" rms-radar-desktop "$VER" amd64 desktop
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.os }}
           path: dist-desktop/*
 
+  rpm:
+    name: RPM package
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: build RPM
+        run: |
+          dnf -y install golang rpm-build systemd-rpm-macros
+          cd "$GITHUB_WORKSPACE"
+          VER="${GITHUB_REF_NAME#v}"
+          PREFIX="rms-radar-${VER}"
+          mkdir -p "$HOME/rpmbuild/SOURCES"
+          tar -czf "$HOME/rpmbuild/SOURCES/${PREFIX}.tar.gz" \
+            --exclude=.git --transform "s,^\\./,${PREFIX}/," .
+          rpmbuild -ba packaging/rpm/rms-radar.spec
+          mkdir -p dist-rpm
+          cp "$HOME/rpmbuild/RPMS"/*/*.rpm dist-rpm/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpm
+          path: dist-rpm/*
+
+  arch:
+    name: Arch package
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: build Arch package
+        run: |
+          pacman -Sy --noconfirm --needed base-devel go
+          useradd -m builder
+          chown -R builder:builder .
+          su builder -c "cd $GITHUB_WORKSPACE/packaging/arch && makepkg --noconfirm --skipchecksums"
+          mkdir -p dist-arch
+          cp packaging/arch/*.pkg.tar.zst dist-arch/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch
+          path: dist-arch/*
+
   publish:
     name: Publish release
-    needs: [web, desktop]
+    needs: [web, desktop, rpm, arch]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
