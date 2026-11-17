@@ -34,6 +34,8 @@ jobs:
           TOTAL=$(go tool cover -func=coverage.out | tail -1 | grep -oE '[0-9]+\.[0-9]+')
           echo "total coverage: ${TOTAL}%"
           awk -v t="$TOTAL" 'BEGIN { if (t+0 < 50) { print "::error::coverage " t "% is below the 50% floor"; exit 1 } }'
+      - name: per-package coverage floors
+        run: ./scripts/check-coverage.sh
       - name: upload coverage
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
