@@ -33,18 +33,8 @@ discoverable on a map and by propagation forecast.
 The gateway list comes from the same public endpoint the open-source
 [Pat](https://github.com/la5nta/pat) Winlink client uses:
 
-```
-POST https://api.winlink.org/gateway/status.json
-Content-Type: application/x-www-form-urlencoded
-
-key=<community access key>&Mode=AnyAll&HistoryHours=48&ServiceCodes=PUBLIC&ServiceCodes=MERCURY&...
-```
-
 This endpoint returns per-gateway latitude/longitude and per-channel
-`ServiceCode`, `SupportedModes`, frequency, and grid square. The access key is
-the one the Winlink Development Team issued to Pat for community use
-(`1880278F11684B358F36845615BD039A`, published in Pat's MIT source). Override
-it with `-key` / `OPENRMSLIST_KEY` if you have your own.
+`ServiceCode`, `SupportedModes`, frequency, and grid square.
 
 ## Quick start
 
