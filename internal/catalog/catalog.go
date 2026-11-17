@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
+	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
 )
 
 // CommunityModems maps Winlink service codes that name a community modem to the

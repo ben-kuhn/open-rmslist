@@ -20,9 +20,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ben-kuhn/open-rmslist/internal/catalog"
-	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
-	"github.com/ben-kuhn/open-rmslist/internal/propagation"
+	"github.com/ben-kuhn/rms-radar/internal/catalog"
+	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
+	"github.com/ben-kuhn/rms-radar/internal/propagation"
 )
 
 // Config configures the HTTP server.
@@ -439,7 +439,7 @@ func (s *Server) handleTiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "tile upstream error", http.StatusBadGateway)
 		return
 	}
-	req.Header.Set("User-Agent", "open-rmslist/"+s.cfg.Version+" (self-hosted Winlink RMS map)")
+	req.Header.Set("User-Agent", "rms-radar/"+s.cfg.Version+" (self-hosted Winlink RMS map)")
 	req.Header.Set("Accept", "image/png,image/*;q=0.8")
 	resp, err := s.tileClient.Do(req)
 	if err != nil {

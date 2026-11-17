@@ -3,7 +3,7 @@ package catalog
 import (
 	"testing"
 
-	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
+	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
 )
 
 func TestModeFamily(t *testing.T) {

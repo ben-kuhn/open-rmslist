@@ -13,9 +13,9 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/ben-kuhn/open-rmslist/internal/catalog"
-	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
-	"github.com/ben-kuhn/open-rmslist/internal/propagation"
+	"github.com/ben-kuhn/rms-radar/internal/catalog"
+	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
+	"github.com/ben-kuhn/rms-radar/internal/propagation"
 )
 
 func newTestServer(t *testing.T, stations []catalog.Station) *Server {

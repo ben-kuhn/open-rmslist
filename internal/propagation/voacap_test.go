@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ben-kuhn/open-rmslist/internal/propagation/voacap"
+	"github.com/ben-kuhn/rms-radar/internal/propagation/voacap"
 )
 
 func TestEncodeInput(t *testing.T) {

@@ -36,7 +36,7 @@ func randomHex(n int) string {
 
 func defaultVOACAPDownloadDir() string {
 	if dir, err := os.UserCacheDir(); err == nil {
-		return filepath.Join(dir, "open-rmslist", "voacap")
+		return filepath.Join(dir, "rms-radar", "voacap")
 	}
 	return filepath.Join(".", "data", "voacap")
 }

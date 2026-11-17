@@ -1,4 +1,4 @@
-/* open-rmslist frontend — vanilla JS + Leaflet. No build step. */
+/* RMS Radar frontend — vanilla JS + Leaflet. No build step. */
 "use strict";
 
 const state = {
@@ -16,10 +16,10 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 // Bump the version to show the notice again after its wording changes.
-const NOTICE_KEY = "rmslist-notice-v2";
+const NOTICE_KEY = "rmsradar-notice-v1";
 
 // Mobile map/list switcher.
-const MOBILE_VIEW_KEY = "rmslist-mobile-view";
+const MOBILE_VIEW_KEY = "rmsradar-mobile-view";
 const MOBILE_QUERY = window.matchMedia("(max-width: 720px)");
 
 // Desktop (double-click) mode: main opens /?desktop=<token>.
@@ -39,7 +39,7 @@ const MODE_ORDER = ["VARA","VARA FM","Mercury","VardeFM","ARDOP","Packet","PACTO
 function applyTheme(theme) {
   state.theme = theme;
   document.documentElement.dataset.theme = theme;
-  try { localStorage.setItem("rmslist-theme", theme); } catch (_) {}
+  try { localStorage.setItem("rmsradar-theme", theme); } catch (_) {}
   $("theme-btn").textContent = theme === "dark" ? "☀" : "◐";
 }
 
@@ -531,7 +531,7 @@ function initDesktopSession() {
       stopBeat();
       try { await fetch(url("quit"), { method: "POST", keepalive: true }); } catch (_) {}
       document.body.innerHTML =
-        '<div class="doc"><h1>open-rmslist has stopped</h1><p>You can close this tab.</p></div>';
+        '<div class="doc"><h1>RMS Radar has stopped</h1><p>You can close this tab.</p></div>';
     });
   }
 }
@@ -553,7 +553,7 @@ function wireEvents() {
 /* ---------- boot ---------- */
 (async function boot() {
   let theme = "dark";
-  try { theme = localStorage.getItem("rmslist-theme") || "dark"; } catch (_) {}
+  try { theme = localStorage.getItem("rmsradar-theme") || "dark"; } catch (_) {}
   applyTheme(theme);
   initNotice();
   initMap();

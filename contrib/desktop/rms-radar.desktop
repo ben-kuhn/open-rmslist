@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Winlink Gateway Map
+Name=RMS Radar
 GenericName=Winlink gateway map
 Comment=Map and rank Winlink RMS gateways by service code, band, and mode
-Exec=openrmslist-desktop
+Exec=rms-radar
 Terminal=false
 Categories=Network;HamRadio;
 Keywords=winlink;ham;radio;gateway;rms;

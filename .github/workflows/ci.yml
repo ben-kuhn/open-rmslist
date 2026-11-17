@@ -63,12 +63,12 @@ jobs:
         run: |
           mkdir -p dist
           go build -trimpath -ldflags "-s -w" \
-            -o "dist/openrmslist-web-${{ matrix.goos }}-${{ matrix.goarch }}" .
+            -o "dist/rms-radar-web-${{ matrix.goos }}-${{ matrix.goarch }}" .
       - name: upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openrmslist-web-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/openrmslist-web-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: rms-radar-web-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/rms-radar-web-${{ matrix.goos }}-${{ matrix.goarch }}
 
   desktop:
     name: Desktop build (${{ matrix.os }})

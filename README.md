@@ -1,4 +1,4 @@
-# open-rmslist
+# RMS Radar
 
 A minimal, secure, self-hostable web map of Winlink RMS gateways — built for
 the community of operators running non-VARA modems (Mercury, VardeFM, and
@@ -10,9 +10,9 @@ stations by predicted link success using current propagation conditions.
 
 - **Dark mode (default) and light mode**
 - **Mobile-friendly** — on narrow screens, Map/List tabs keep the map visible and the gateway list scrolls in its own pane
-- **Native desktop app** — `openrmslist-desktop` opens a real window
+- **Native desktop app** — `rms-radar-desktop` opens a real window
   (WKWebView / WebView2 / WebKitGTK); closing the window quits. The
-  `openrmslist-web` binary is the headless server, with a browser fallback and
+  `rms-radar` binary is the headless server, with a browser fallback and
   `-d` for services
 - **Service-code dropdown** populated from the fetched gateway list
 - **Service-code aware** — gateways are shown and filtered by the Winlink
@@ -34,7 +34,7 @@ stations by predicted link success using current propagation conditions.
 The Winlink gateway list advertises community modems by their *VARA-compatible*
 API: a Mercury HF modem is listed as `VARA`, a VardeFM modem as `VARA FM`, and
 the real identity is carried in the service code (`MERCURY`, `VARDEFM`, …).
-Rather than matching mode strings, `open-rmslist` uses the service code: a
+Rather than matching mode strings, RMS Radar uses the service code: a
 channel whose service code names a community modem is shown under that name
 (Mercury, VardeFM), while everything else keeps the advertised mode. The raw
 API mode stays available as a hover hint and in the `raw_mode` field.
@@ -52,8 +52,8 @@ This endpoint returns per-gateway latitude/longitude and per-channel
 The default build is the CGO-free **web/server** binary:
 
 ```bash
-go build -o openrmslist-web .
-./openrmslist-web              # browser mode: opens the map; closing the tab quits
+go build -o rms-radar .
+./rms-radar              # browser mode: opens the map; closing the tab quits
 ```
 
 The default is **browser desktop mode** on every platform: the app starts a local
@@ -61,13 +61,13 @@ server, opens your default browser, and exits when the last browser tab for it
 closes. For a headless service that stays running:
 
 ```bash
-./openrmslist-web -d           # service mode: no browser, no auto-exit
-./openrmslist-web -d -listen 0.0.0.0:8079
+./rms-radar -d           # service mode: no browser, no auto-exit
+./rms-radar -d -listen 0.0.0.0:8079
 ```
 
 ### Native desktop window
 
-`openrmslist-desktop` embeds the same UI in a native window instead of a browser.
+`rms-radar-desktop` embeds the same UI in a native window instead of a browser.
 It requires CGo and the platform webview runtime:
 
 - **Linux:** `libwebkit2gtk-4.1-dev` and `libgtk-3-dev` (the build script adds a
@@ -82,7 +82,7 @@ It requires CGo and the platform webview runtime:
 or build it directly:
 
 ```bash
-CGO_ENABLED=1 go build -tags desktop -o openrmslist-desktop .
+CGO_ENABLED=1 go build -tags desktop -o rms-radar-desktop .
 ```
 
 Closing the window quits the process; there is no browser tab or heartbeat
@@ -93,25 +93,25 @@ plus `-debug` for webview developer tools.
 
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
-| `-listen` | `OPENRMSLIST_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
-| `-service-codes` | `OPENRMSLIST_SERVICE_CODES` | `PUBLIC,EMCOMM,MERCURY,VARDEFM` | Comma-separated service codes to fetch (no wildcard) |
-| `-refresh` | `OPENRMSLIST_REFRESH` | `1h` | Gateway list refresh interval |
-| `-cache-dir` | `OPENRMSLIST_CACHE_DIR` | `./data` | Cache directory |
-| `-key` | `OPENRMSLIST_KEY` | Pat's community key | Winlink CMS access key |
-| `-history-hours` | `OPENRMSLIST_HISTORY_HOURS` | `48` | Channel history (1–48) |
-| `-voacap-url` | `OPENRMSLIST_VOACAP_URL` | *(empty)* | Optional remote VOACAP API base URL (enables forecasts) |
-| `-voacap-executable` | `OPENRMSLIST_VOACAP_EXECUTABLE` | *(empty)* | Path to a local `voacapl`/`voacapw` binary (enables forecasts) |
-| `-voacap-data-dir` | `OPENRMSLIST_VOACAP_DATA_DIR` | *(auto)* | ITSHFBC data directory for the local VOACAP binary |
-| `-voacap-download-url` | `OPENRMSLIST_VOACAP_DOWNLOAD_URL` | *(empty)* | Download a VOACAP distribution (binary + data) from this URL |
-| `-voacap-download-dir` | `OPENRMSLIST_VOACAP_DOWNLOAD_DIR` | *user cache* | Extract directory for the downloaded VOACAP distribution |
-| `-voacap-download-sha256` | `OPENRMSLIST_VOACAP_DOWNLOAD_SHA256` | *(empty)* | Optional SHA-256 of the distribution archive |
-| `-web-dir` | `OPENRMSLIST_WEB_DIR` | *(embedded)* | Serve web assets from a directory instead |
-| `-tile-url` | `OPENRMSLIST_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Upstream tile template; proxied and disk-cached by the server |
-| `-vhf-max-range` | `OPENRMSLIST_VHF_MAX_RANGE` | `400` | Max plausible VHF/UHF path (km) for ranking — distance-based, not continent-based; set large to disable |
-| `-d`, `-daemon` | `OPENRMSLIST_DAEMON` | `false` | Service mode: do not open a browser and never auto-exit |
-| `-open-browser` | `OPENRMSLIST_OPEN_BROWSER` | `true` | Open the web UI in the default browser on start (browser desktop mode) |
+| `-listen` | `RMSRADAR_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
+| `-service-codes` | `RMSRADAR_SERVICE_CODES` | `PUBLIC,EMCOMM,MERCURY,VARDEFM` | Comma-separated service codes to fetch (no wildcard) |
+| `-refresh` | `RMSRADAR_REFRESH` | `1h` | Gateway list refresh interval |
+| `-cache-dir` | `RMSRADAR_CACHE_DIR` | `./data` | Cache directory |
+| `-key` | `RMSRADAR_KEY` | Pat's community key | Winlink CMS access key |
+| `-history-hours` | `RMSRADAR_HISTORY_HOURS` | `48` | Channel history (1–48) |
+| `-voacap-url` | `RMSRADAR_VOACAP_URL` | *(empty)* | Optional remote VOACAP API base URL (enables forecasts) |
+| `-voacap-executable` | `RMSRADAR_VOACAP_EXECUTABLE` | *(empty)* | Path to a local `voacapl`/`voacapw` binary (enables forecasts) |
+| `-voacap-data-dir` | `RMSRADAR_VOACAP_DATA_DIR` | *(auto)* | ITSHFBC data directory for the local VOACAP binary |
+| `-voacap-download-url` | `RMSRADAR_VOACAP_DOWNLOAD_URL` | *(empty)* | Download a VOACAP distribution (binary + data) from this URL |
+| `-voacap-download-dir` | `RMSRADAR_VOACAP_DOWNLOAD_DIR` | *user cache* | Extract directory for the downloaded VOACAP distribution |
+| `-voacap-download-sha256` | `RMSRADAR_VOACAP_DOWNLOAD_SHA256` | *(empty)* | Optional SHA-256 of the distribution archive |
+| `-web-dir` | `RMSRADAR_WEB_DIR` | *(embedded)* | Serve web assets from a directory instead |
+| `-tile-url` | `RMSRADAR_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Upstream tile template; proxied and disk-cached by the server |
+| `-vhf-max-range` | `RMSRADAR_VHF_MAX_RANGE` | `400` | Max plausible VHF/UHF path (km) for ranking — distance-based, not continent-based; set large to disable |
+| `-d`, `-daemon` | `RMSRADAR_DAEMON` | `false` | Service mode: do not open a browser and never auto-exit |
+| `-open-browser` | `RMSRADAR_OPEN_BROWSER` | `true` | Open the web UI in the default browser on start (browser desktop mode) |
 
-The native `openrmslist-desktop` binary accepts the same data/propagation flags
+The native `rms-radar-desktop` binary accepts the same data/propagation flags
 plus `-debug` for webview developer tools; it has no `-d`/`-open-browser` because
 closing its window always quits.
 
@@ -150,7 +150,7 @@ codes to request. The default is the set the API currently serves:
 | `VARDEFM` | VardeFM gateways |
 
 Add any private group code you are entitled to with
-`-service-codes PUBLIC,MYGROUP` (or `OPENRMSLIST_SERVICE_CODES`); codes with no
+`-service-codes PUBLIC,MYGROUP` (or `RMSRADAR_SERVICE_CODES`); codes with no
 gateways simply contribute nothing.
 
 A per-client setup guide is served at `/clients.html` (source:
@@ -161,7 +161,7 @@ caveat.
 
 ## Propagation
 
-`open-rmslist` estimates link success two ways, preferring the more accurate
+RMS Radar estimates link success two ways, preferring the more accurate
 one and falling back gracefully:
 
 1. **Heuristic (always available)** — real-time ionosonde `foF2`/MUF from
@@ -194,7 +194,7 @@ channel is highlighted.
 
 ## Installing VOACAP (optional)
 
-Point-to-point forecasts use an external VOACAP engine. `open-rmslist` is MIT;
+Point-to-point forecasts use an external VOACAP engine. RMS Radar is MIT;
 the engine it shells out to is a separate program with its own permissive
 terms: the core VOACAP prediction code is U.S. Government public domain
 (NTIA/ITS), the `voacapl` Linux port (J.A. Watson) is CC0, and its `itshfbc`
@@ -202,7 +202,7 @@ coefficient data is freely redistributable (Debian ships it as `voacapl-data`).
 Because it is exec'd rather than linked, there is no combined-work license
 question.
 
-Install it with your package manager, then either let `open-rmslist` find it on
+Install it with your package manager, then either let RMS Radar find it on
 `PATH` or point at it explicitly:
 
 - **Debian/Ubuntu:** `sudo apt install voacapl voacapl-data`
@@ -211,7 +211,7 @@ Install it with your package manager, then either let `open-rmslist` find it on
   or use the `nix-ham-packages` `voacapl` package
 
 ```bash
-./open-rmslist -voacap-executable "$(command -v voacapl)"
+./rms-radar -voacap-executable "$(command -v voacapl)"
 ```
 
 `-voacap-data-dir` is only needed if the `itshfbc` data lives somewhere
@@ -220,11 +220,11 @@ with `--run-dir`).
 
 ### Auto-downloading VOACAP (macOS / Windows)
 
-On platforms without a package manager, `open-rmslist` can fetch and extract a
+On platforms without a package manager, RMS Radar can fetch and extract a
 VOACAP distribution for you:
 
 ```bash
-./open-rmslist -voacap-download-url https://example.com/voacap-macos.tar.gz
+./rms-radar -voacap-download-url https://example.com/voacap-macos.tar.gz
 ```
 
 Point `-voacap-download-url` at a `.zip`, `.tar.gz`, `.tgz`, or `.tar`
@@ -260,24 +260,24 @@ First-class targets (CI builds all of them, static binaries via
 
 Packaging included:
 
-- **systemd unit** — `contrib/systemd/open-rmslist.service` (runs with `-d`)
+- **systemd unit** — `contrib/systemd/rms-radar.service` (runs with `-d`)
 - **Arch** — `packaging/arch/PKGBUILD`
 - **Nix / NixOS** — see the sibling
   [`nix-ham-packages`](https://github.com/ben-kuhn/nix-ham-packages) overlay
-  (`pkgs.open-rmslist` + `services.open-rmslist` module, `-d` by default)
+  (`pkgs.rms-radar` + `services.rms-radar` module, `-d` by default)
 
 ### Release artifacts
 
 Two packages are published:
 
-- **Web/server** — `openrmslist-web-<version>-<os>-<arch>` (CGO-free; the
-  Arch/RPM/Nix service packages install it as `open-rms-list`).
-- **Desktop** — `openrmslist-desktop-<version>-<os>-<arch>` with a native window:
-  - **macOS** — `openrmslist-desktop.app.zip`. The bundle is unsigned; on first
-    launch use right-click → **Open**, or run
-    `xattr -dr com.apple.quarantine openrmslist-desktop.app`.
+- **Web/server** — `rms-radar-web-<version>-<os>-<arch>` (CGO-free; the
+  Arch/RPM/Nix service packages install it as `rms-radar`).
+- **Desktop** — `rms-radar-desktop-<version>-<os>-<arch>` with a native window:
+  - **macOS** — the `…-app.zip` contains `RMS Radar.app`. The bundle is unsigned;
+    on first launch use right-click → **Open**, or run
+    `xattr -dr com.apple.quarantine "RMS Radar.app"`.
   - **Windows** — a `.zip` with a GUI-subsystem `.exe` (no console window).
-  - **Linux** — a `.tar.gz` with an `openrmslist-desktop.desktop` launcher. The
+  - **Linux** — a `.tar.gz` with an `rms-radar-desktop.desktop` launcher. The
     system needs WebKitGTK 4.1 installed (`libwebkit2gtk-4.1-0`).
 
 ### Desktop GUI options
@@ -291,7 +291,7 @@ remains CGO-free and dependency-free at runtime.
 
 Alternatives if the native build is not a fit:
 
-1. **Browser mode** — `openrmslist-web` opens the default browser and exits when
+1. **Browser mode** — `rms-radar` opens the default browser and exits when
    the last tab closes (plus a Quit button). Zero build dependencies.
 2. **System tray wrapper** — `fyne.io/systray` / `getlantern/systray` with
    Open/Quit items; the UI stays in the browser. Good for Linux/Windows, but
@@ -322,7 +322,7 @@ so previously viewed areas render offline; new areas require connectivity.
 
 ## Security & privacy
 
-`open-rmslist` is designed as a single-user, self-hosted tool and has **no
+RMS Radar is designed as a single-user, self-hosted tool and has **no
 authentication**. Treat it as a LAN/loopback service:
 
 - **Binds to `127.0.0.1:8079` by default.** Pass `-listen 0.0.0.0:8079` (and

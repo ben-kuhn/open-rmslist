@@ -32,7 +32,7 @@ for t in "${targets[@]}"; do
   read -r goos goarch <<<"$t"
   ext=""
   [ "$goos" = "windows" ] && ext=".exe"
-  name="openrmslist-web-${VERSION}-${goos}-${goarch}"
+  name="rms-radar-web-${VERSION}-${goos}-${goarch}"
 
   echo "==> ${name}"
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
@@ -46,5 +46,5 @@ for t in "${targets[@]}"; do
   fi
 done
 
-(cd "$OUT" && sha256sum openrmslist-* > checksums.txt)
+(cd "$OUT" && sha256sum rms-radar-* > checksums.txt)
 echo "==> wrote web artifacts to ${OUT}/"

@@ -19,13 +19,13 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           VERSION="$(sed -n 's/^var version = "\([^"]*\)"/\1/p' main.go)"
           [ -n "$VERSION" ] || { echo "could not determine version" >&2; exit 1; }
-          PREFIX="open-rmslist-${VERSION}"
+          PREFIX="rms-radar-${VERSION}"
           mkdir -p "$HOME/rpmbuild/SOURCES"
           # Source0 points at the GitHub tag, which may not exist yet; build a
           # local tarball with the same layout for validation.
           tar -czf "$HOME/rpmbuild/SOURCES/${PREFIX}.tar.gz" \
             --exclude=.git --transform "s,^\\./,${PREFIX}/," .
-          rpmbuild -ba packaging/rpm/open-rmslist.spec
+          rpmbuild -ba packaging/rpm/rms-radar.spec
 
   arch:
     name: Arch (PKGBUILD)
@@ -40,7 +40,7 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           VERSION="$(sed -n 's/^var version = "\([^"]*\)"/\1/p' main.go)"
           [ -n "$VERSION" ] || { echo "could not determine version" >&2; exit 1; }
-          PREFIX="open-rmslist-${VERSION}"
+          PREFIX="rms-radar-${VERSION}"
           # PKGBUILD source points at the GitHub tag; drop a local tarball with
           # the same name so makepkg uses it instead of downloading.
           tar -czf "packaging/arch/${PREFIX}.tar.gz" \
@@ -61,7 +61,7 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
       - name: checkout nix-ham-packages
         run: git clone --depth 1 https://github.com/ben-kuhn/nix-ham-packages.git /tmp/nix-ham-packages
-      - name: build open-rmslist package
+      - name: build rms-radar package
         run: |
           nix build --impure --expr \
-            "(import <nixpkgs> {}).callPackage /tmp/nix-ham-packages/open-rmslist { src = $GITHUB_WORKSPACE; }"
+            "(import <nixpkgs> {}).callPackage /tmp/nix-ham-packages/rms-radar { src = $GITHUB_WORKSPACE; }"

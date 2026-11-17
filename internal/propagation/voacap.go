@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ben-kuhn/open-rmslist/internal/propagation/voacap"
+	"github.com/ben-kuhn/rms-radar/internal/propagation/voacap"
 )
 
 // ErrFrequencyOutOfBounds is returned when a frequency is outside the range

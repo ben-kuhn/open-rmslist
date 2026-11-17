@@ -1,4 +1,4 @@
-module github.com/ben-kuhn/open-rmslist
+module github.com/ben-kuhn/rms-radar
 
 go 1.23
 

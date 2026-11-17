@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
-	"github.com/ben-kuhn/open-rmslist/internal/propagation"
-	"github.com/ben-kuhn/open-rmslist/internal/server"
+	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
+	"github.com/ben-kuhn/rms-radar/internal/propagation"
+	"github.com/ben-kuhn/rms-radar/internal/server"
 )
 
 // Config is the shared startup configuration.

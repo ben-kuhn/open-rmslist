@@ -1,11 +1,11 @@
-# Maintainer: open-rmslist contributors
+# Maintainer: RMS Radar contributors
 
-pkgname=open-rmslist
+pkgname=rms-radar
 pkgver=0.1.2
 pkgrel=1
 pkgdesc="Winlink RMS gateway map with service-code filtering and propagation ranking"
 arch=('x86_64' 'aarch64' 'armv7h')
-url="https://github.com/ben-kuhn/open-rmslist"
+url="https://github.com/ben-kuhn/rms-radar"
 license=('MIT')
 depends=()
 makedepends=('go')
@@ -16,14 +16,14 @@ sha256sums=('2911cf15839a177fa2cfb8f822440461458506e1b6c6b5644c5c68ffbe5e6e36')
 build() {
   cd "${pkgname}-${pkgver}"
   export CGO_ENABLED=0
-  go build -trimpath -ldflags "-s -w -X main.version=${pkgver}" -o open-rmslist .
+  go build -trimpath -ldflags "-s -w -X main.version=${pkgver}" -o rms-radar .
 }
 
 package() {
   cd "${pkgname}-${pkgver}"
-  install -Dm755 open-rmslist "${pkgdir}/usr/bin/open-rmslist"
+  install -Dm755 rms-radar "${pkgdir}/usr/bin/rms-radar"
   install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
-  install -Dm644 contrib/systemd/open-rmslist.service "${pkgdir}/usr/lib/systemd/system/open-rmslist.service"
-  install -Dm644 contrib/desktop/open-rmslist.desktop "${pkgdir}/usr/share/applications/open-rmslist.desktop"
+  install -Dm644 contrib/systemd/rms-radar.service "${pkgdir}/usr/lib/systemd/system/rms-radar.service"
+  install -Dm644 contrib/desktop/rms-radar.desktop "${pkgdir}/usr/share/applications/rms-radar.desktop"
   # The web UI is embedded in the binary; no separate assets to install.
 }

@@ -1,21 +1,21 @@
-# open-rmslist RPM spec
+# RMS Radar RPM spec
 #
 # Build:
-#   spectool -g packaging/rpm/open-rmslist.spec   # fetch Source0 tarball
-#   rpmbuild -ba packaging/rpm/open-rmslist.spec
+#   spectool -g packaging/rpm/rms-radar.spec   # fetch Source0 tarball
+#   rpmbuild -ba packaging/rpm/rms-radar.spec
 #
 # Note: point-to-point VOACAP forecasts are optional. The "voacapl" engine is
 # not packaged in Fedora/EPEL proper (see the Recommends comment below), so
-# open-rmslist falls back to its built-in real-time heuristic until a COPR or
+# RMS Radar falls back to its built-in real-time heuristic until a COPR or
 # local build provides it.
 
-Name:           open-rmslist
+Name:           rms-radar
 Version:        0.1.2
 Release:        1%{?dist}
 Summary:        Winlink RMS gateway map with service-code filtering and propagation ranking
 
 License:        MIT
-URL:            https://github.com/ben-kuhn/open-rmslist
+URL:            https://github.com/ben-kuhn/rms-radar
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
 
 # Static Go binary with no usable DWARF; disable the debuginfo subpackage to
@@ -39,7 +39,7 @@ current propagation conditions.
 Point-to-point VOACAP forecasts are optional. To enable them, install the
 voacapl engine and its itshfbc data (not packaged in Fedora proper — use a
 COPR or build from https://github.com/jawatson/voacapl), or point
-open-rmslist at a remote VOACAP API with -voacap-url.
+rms-radar at a remote VOACAP API with -voacap-url.
 
 %prep
 %autosetup
@@ -47,29 +47,29 @@ open-rmslist at a remote VOACAP API with -voacap-url.
 %build
 # Static, portable binary (no cgo, no external Go dependencies).
 export CGO_ENABLED=0
-go build -trimpath -ldflags "-s -w -X main.version=%{version}" -o open-rmslist .
+go build -trimpath -ldflags "-s -w -X main.version=%{version}" -o rms-radar .
 
 %install
-install -Dm755 open-rmslist %{buildroot}%{_bindir}/open-rmslist
-install -Dm644 contrib/systemd/open-rmslist.service %{buildroot}%{_unitdir}/open-rmslist.service
-install -Dm644 contrib/desktop/open-rmslist.desktop %{buildroot}%{_datadir}/applications/open-rmslist.desktop
+install -Dm755 rms-radar %{buildroot}%{_bindir}/rms-radar
+install -Dm644 contrib/systemd/rms-radar.service %{buildroot}%{_unitdir}/rms-radar.service
+install -Dm644 contrib/desktop/rms-radar.desktop %{buildroot}%{_datadir}/applications/rms-radar.desktop
 
 %files
-%{_bindir}/open-rmslist
-%{_unitdir}/open-rmslist.service
-%{_datadir}/applications/open-rmslist.desktop
+%{_bindir}/rms-radar
+%{_unitdir}/rms-radar.service
+%{_datadir}/applications/rms-radar.desktop
 %license LICENSE
 %doc README.md
 
 %post
-%systemd_post open-rmslist.service
+%systemd_post rms-radar.service
 
 %preun
-%systemd_preun open-rmslist.service
+%systemd_preun rms-radar.service
 
 %postun
-%systemd_postun open-rmslist.service
+%systemd_postun rms-radar.service
 
 %changelog
-* Mon Nov 16 2026 open-rmslist contributors - 0.1.0-1
+* Mon Nov 16 2026 RMS Radar contributors - 0.1.0-1
 - Initial package

@@ -2,7 +2,7 @@
 data/
 
 # Build output
-/open-rmslist
+/rms-radar
 /dist/
 
 # Test artifacts

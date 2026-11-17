@@ -4,9 +4,9 @@
   var theme = "dark";
   var view = "map";
   try {
-    var savedTheme = localStorage.getItem("rmslist-theme");
+    var savedTheme = localStorage.getItem("rmsradar-theme");
     if (savedTheme === "light" || savedTheme === "dark") theme = savedTheme;
-    if (localStorage.getItem("rmslist-mobile-view") === "list") view = "list";
+    if (localStorage.getItem("rmsradar-mobile-view") === "list") view = "list";
   } catch (_) {}
   var root = document.documentElement;
   root.dataset.theme = theme;

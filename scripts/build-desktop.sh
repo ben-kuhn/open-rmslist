@@ -16,7 +16,7 @@ VERSION="${VERSION#v}"
 OUT="${OUT:-dist-desktop}"
 GOOS="$(go env GOOS)"
 GOARCH="$(go env GOARCH)"
-NAME="openrmslist-desktop-${VERSION}-${GOOS}-${GOARCH}"
+NAME="rms-radar-desktop-${VERSION}-${GOOS}-${GOARCH}"
 EXT=""
 [ "$GOOS" = "windows" ] && EXT=".exe"
 
@@ -50,27 +50,27 @@ CGO_ENABLED=1 go build -tags desktop -trimpath -ldflags "${LDFLAGS}" \
 
 case "$GOOS" in
   darwin)
-    app="${OUT}/openrmslist-desktop.app"
+    app="${OUT}/RMS Radar.app"
     mkdir -p "${app}/Contents/MacOS"
-    cp "${OUT}/${NAME}" "${app}/Contents/MacOS/openrmslist-desktop"
+    cp "${OUT}/${NAME}" "${app}/Contents/MacOS/rms-radar-desktop"
     cat > "${app}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Winlink Gateway Map</string>
-  <key>CFBundleDisplayName</key><string>Winlink Gateway Map</string>
-  <key>CFBundleIdentifier</key><string>radio.ku0hn.openrmslist-desktop</string>
+  <key>CFBundleName</key><string>RMS Radar</string>
+  <key>CFBundleDisplayName</key><string>RMS Radar</string>
+  <key>CFBundleIdentifier</key><string>radio.ku0hn.rms-radar-desktop</string>
   <key>CFBundleVersion</key><string>${VERSION}</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleExecutable</key><string>openrmslist-desktop</string>
+  <key>CFBundleExecutable</key><string>rms-radar-desktop</string>
   <key>LSMinimumSystemVersion</key><string>10.13</string>
   <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
 PLIST
-    (cd "$OUT" && zip -qry "${NAME}-app.zip" "openrmslist-desktop.app")
+    (cd "$OUT" && zip -qry "${NAME}-app.zip" "RMS Radar.app")
     rm -rf "$app"
     ;;
   windows)
@@ -81,14 +81,14 @@ PLIST
     fi
     ;;
   *)
-    cp contrib/desktop/openrmslist-desktop.desktop "${OUT}/openrmslist-desktop.desktop"
-    ln -sf "${NAME}${EXT}" "${OUT}/openrmslist-desktop"
-    tar -C "$OUT" -czf "${OUT}/${NAME}.tar.gz" "${NAME}${EXT}" "openrmslist-desktop" "openrmslist-desktop.desktop"
-    rm -f "${OUT}/openrmslist-desktop" "${OUT}/openrmslist-desktop.desktop"
+    cp contrib/desktop/rms-radar-desktop.desktop "${OUT}/rms-radar-desktop.desktop"
+    ln -sf "${NAME}${EXT}" "${OUT}/rms-radar-desktop"
+    tar -C "$OUT" -czf "${OUT}/${NAME}.tar.gz" "${NAME}${EXT}" "rms-radar-desktop" "rms-radar-desktop.desktop"
+    rm -f "${OUT}/rms-radar-desktop" "${OUT}/rms-radar-desktop.desktop"
     ;;
 esac
 
 if command -v sha256sum >/dev/null 2>&1; then
-  (cd "$OUT" && sha256sum openrmslist-desktop-* > checksums.txt)
+  (cd "$OUT" && sha256sum rms-radar-desktop-* > checksums.txt)
 fi
 echo "==> wrote desktop artifacts to ${OUT}/"

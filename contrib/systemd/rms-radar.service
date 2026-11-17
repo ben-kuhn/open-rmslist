@@ -1,6 +1,6 @@
 [Unit]
-Description=open-rmslist — Winlink RMS gateway map
-Documentation=https://github.com/ben-kuhn/open-rmslist
+Description=RMS Radar — Winlink RMS gateway map
+Documentation=https://github.com/ben-kuhn/rms-radar
 After=network-online.target
 Wants=network-online.target
 
@@ -8,10 +8,10 @@ Wants=network-online.target
 Type=simple
 # Create a dedicated user and a writable data directory, or use DynamicUser
 # with StateDirectory (see the NixOS module in ../nix-ham-packages).
-User=open-rmslist
-Group=open-rmslist
+User=rms-radar
+Group=rms-radar
 # Bind to 127.0.0.1 for a private instance, or 0.0.0.0 to serve your LAN.
-ExecStart=/usr/local/bin/open-rmslist -d -listen 127.0.0.1:8079 -cache-dir /var/lib/open-rmslist
+ExecStart=/usr/local/bin/rms-radar -d -listen 127.0.0.1:8079 -cache-dir /var/lib/rms-radar
 Restart=on-failure
 RestartSec=5
 
@@ -20,7 +20,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/open-rmslist
+ReadWritePaths=/var/lib/rms-radar
 CapabilityBoundingSet=
 AmbientCapabilities=
 
