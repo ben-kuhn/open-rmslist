@@ -10,6 +10,7 @@ func TestModeFamily(t *testing.T) {
 	cases := map[string]string{
 		"VARA": "VARA", "VARA FM": "VARA FM", "VARA FM WIDE": "VARA FM",
 		"Mercury": "Mercury", "VardeFM": "VardeFM",
+		"Mercury 500": "Mercury", "VardeFM WIDE": "VardeFM",
 		"ARDOP 2000":  "ARDOP",
 		"Packet 1200": "Packet", "Pactor 3": "PACTOR", "Robust Packet": "Robust Packet",
 		"WINMOR 1600": "WINMOR", "Unknown": "Other",
@@ -89,20 +90,25 @@ func TestNormalize(t *testing.T) {
 }
 
 func TestCommunityModemLabels(t *testing.T) {
-	// Community modem codes are labelled with the service name.
-	for sc, want := range map[string]string{"MERCURY": "Mercury", "VARDEFM": "VardeFM"} {
-		ch := normalizeChannel(cmsapi.GatewayChannel{SupportedModes: "VARA", ServiceCode: sc})
-		if ch.Mode != want {
-			t.Errorf("mode for %s = %q, want %q", sc, ch.Mode, want)
-		}
-		if ch.RawMode != "VARA" {
-			t.Errorf("raw_mode for %s = %q, want VARA", sc, ch.RawMode)
-		}
+	cases := []struct{ sc, raw, want string }{
+		{"MERCURY", "VARA", "Mercury"},
+		{"MERCURY", "VARA 500", "Mercury 500"},
+		{"VARDEFM", "VARA", "VardeFM"},
+		{"VARDEFM", "VARA FM WIDE", "VardeFM WIDE"},
+		// Non-VARA modes under a community code keep their real mode.
+		{"MERCURY", "ARDOP 2000", "ARDOP 2000"},
+		{"VARDEFM", "Packet 1200", "Packet 1200"},
+		// Access codes keep the reported mode.
+		{"EMCOMM", "ARDOP 2000", "ARDOP 2000"},
+		{"PUBLIC", "VARA 500", "VARA 500"},
 	}
-
-	// Access codes keep the mode the API reports.
-	emcomm := normalizeChannel(cmsapi.GatewayChannel{SupportedModes: "ARDOP 2000", ServiceCode: "EMCOMM"})
-	if emcomm.Mode != "ARDOP 2000" || emcomm.RawMode != "ARDOP 2000" {
-		t.Errorf("EMCOMM mode = %q / raw %q, want ARDOP 2000", emcomm.Mode, emcomm.RawMode)
+	for _, c := range cases {
+		ch := normalizeChannel(cmsapi.GatewayChannel{SupportedModes: c.raw, ServiceCode: c.sc})
+		if ch.Mode != c.want {
+			t.Errorf("%s %q: mode = %q, want %q", c.sc, c.raw, ch.Mode, c.want)
+		}
+		if ch.RawMode != c.raw {
+			t.Errorf("%s %q: raw_mode = %q, want %q", c.sc, c.raw, ch.RawMode, c.raw)
+		}
 	}
 }

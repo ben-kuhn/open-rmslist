@@ -84,10 +84,7 @@ func normalizeChannel(ch cmsapi.GatewayChannel) Channel {
 		raw = "Unknown"
 	}
 	sc := strings.ToUpper(strings.TrimSpace(ch.ServiceCode))
-	mode := raw
-	if label, ok := CommunityModems[sc]; ok {
-		mode = label
-	}
+	mode := communityMode(sc, raw)
 	return Channel{
 		ServiceCode:    sc,
 		Mode:           mode,
@@ -102,6 +99,30 @@ func normalizeChannel(ch cmsapi.GatewayChannel) Channel {
 		Antenna:        ch.Antenna,
 		Band:           bandForFrequency(ch.Frequency),
 	}
+}
+
+// communityMode returns the display label for a channel. A community-modem
+// service code replaces the VARA family name (keeping any bandwidth suffix, so
+// "VARA 500" becomes "Mercury 500"), while every other mode is left exactly as
+// reported. This matters when a gateway publishes non-VARA channels under a
+// community code (for example an ARDOP channel under MERCURY).
+func communityMode(serviceCode, mode string) string {
+	label, ok := CommunityModems[serviceCode]
+	if !ok {
+		return mode
+	}
+	fields := strings.Fields(mode)
+	if len(fields) == 0 || !strings.EqualFold(fields[0], "VARA") {
+		return mode
+	}
+	rest := fields[1:]
+	if len(rest) > 0 && strings.EqualFold(rest[0], "FM") {
+		rest = rest[1:]
+	}
+	if len(rest) == 0 {
+		return label
+	}
+	return label + " " + strings.Join(rest, " ")
 }
 
 func modeFamily(mode string) string {

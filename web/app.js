@@ -8,6 +8,7 @@ const state = {
   conditions: null,
   ranked: new Map(),     // callsign -> best ranked entry
   markers: new Map(),    // callsign -> {base, ranked} Leaflet markers
+  expanded: new Set(),   // callsigns whose full channel list is shown
   filters: { serviceCode: "", mode: "", band: "" },
   theme: "dark",
 };
@@ -326,6 +327,8 @@ function renderList(stations) {
       const bi = chans.findIndex((c) => isRankedChannel(c, r));
       if (bi > 0) chans = [chans[bi], ...chans.slice(0, bi), ...chans.slice(bi + 1)];
     }
+    const expanded = state.expanded.has(st.callsign);
+    const shown = expanded ? chans : chans.slice(0, 4);
     li.innerHTML =
       `<div style="display:flex;align-items:center">` +
         `<span class="fresh ${fc}"></span>` +
@@ -337,10 +340,21 @@ function renderList(stations) {
         ` · ${freshText(st.hours_since_status)}` +
         (r ? ` · ${r.distance_km.toFixed(0)} km` : "") +
         (r && r.note ? ` · ${esc(r.note)}` : "") + `</div>` +
-      `<div class="station-channels">${chans.slice(0, 4).map((c) =>
+      `<div class="station-channels">${shown.map((c) =>
         `<div class="ch-row${r && isRankedChannel(c, r) ? " ch-best" : ""}"><span class="ch-mode"${modeTitle(c)}>${esc(c.mode)}</span><span class="ch-freq">${esc(c.frequency || fmtHz(c.frequency_hz))}</span><span class="ch-sc">${esc(c.service_code || "PUBLIC")}</span></div>`).join("")}` +
-        (chans.length > 4 ? `<div class="station-meta">+${chans.length - 4} more</div>` : "") +
+        (chans.length > 4
+          ? `<button type="button" class="more-ch">${expanded ? "Show less" : `+${chans.length - 4} more`}</button>`
+          : "") +
       `</div>`;
+    const more = li.querySelector(".more-ch");
+    if (more) {
+      more.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (expanded) state.expanded.delete(st.callsign);
+        else state.expanded.add(st.callsign);
+        applyFilters();
+      });
+    }
     li.addEventListener("click", () => {
       if (!st.latitude && !st.longitude) return;
       const focus = () => {

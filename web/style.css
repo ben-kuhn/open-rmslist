@@ -226,6 +226,18 @@ select:focus, input:focus { outline: none; border-color: var(--accent); }
 .station-call .sq { color: var(--text-dim); font-weight: 500; margin-left: 6px; font-size: 12px; }
 .station-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 .station-channels { font-size: 12px; margin-top: 4px; }
+.more-ch {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.more-ch:hover, .more-ch:focus-visible { text-decoration: underline; }
 .ch-row { display: flex; gap: 6px; align-items: baseline; }
 .ch-mode { font-weight: 600; }
 .ch-freq { color: var(--text-dim); font-variant-numeric: tabular-nums; }
