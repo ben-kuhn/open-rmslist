@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io/fs"
 	"log"
@@ -42,6 +44,10 @@ type Server struct {
 	stations   []catalog.Station
 
 	voacapEnabled bool
+
+	// assetVersion is a short content hash of the mutable web assets, used to
+	// cache-bust app.js/style.css behind a CDN.
+	assetVersion string
 }
 
 func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heuristic) *Server {
@@ -67,7 +73,21 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 		heuristic:     heur,
 		ranker:        &propagation.Ranker{Predictors: predictors},
 		voacapEnabled: voacapEnabled,
+		assetVersion:  assetVersion(web),
 	}
+}
+
+// assetVersion returns a short hash of the mutable web assets. When app.js or
+// style.css changes, the hash changes and the HTML points at a new URL, which
+// bypasses CDN edge caches (which ignore a browser hard-refresh).
+func assetVersion(web fs.FS) string {
+	h := sha256.New()
+	for _, name := range []string{"app.js", "style.css"} {
+		if b, err := fs.ReadFile(web, name); err == nil {
+			_, _ = h.Write(b)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:8]
 }
 
 // Refresh re-parses the loader's current snapshot into the normalized catalog.
@@ -95,8 +115,35 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/conditions", s.handleConditions)
 	mux.HandleFunc("/api/rank", s.handleRank)
 	mux.HandleFunc("/api/config", s.handleConfig)
-	mux.Handle("/", http.FileServer(http.FS(s.web)))
+
+	fileServer := http.FileServer(http.FS(s.web))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/", "/index.html":
+			s.serveIndex(w, r)
+		default:
+			fileServer.ServeHTTP(w, r)
+		}
+	})
 	return securityHeaders(mux)
+}
+
+// serveIndex renders index.html with content-hashed asset URLs and no-cache, so
+// a fresh HTML page always points at fresh JS/CSS even behind an aggressive CDN.
+func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request) {
+	b, err := fs.ReadFile(s.web, "index.html")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	html := string(b)
+	if s.assetVersion != "" {
+		html = strings.ReplaceAll(html, `href="style.css"`, `href="style.css?v=`+s.assetVersion+`"`)
+		html = strings.ReplaceAll(html, `src="app.js"`, `src="app.js?v=`+s.assetVersion+`"`)
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write([]byte(html))
 }
 
 // securityHeaders adds defensive headers to every response. The CSP allows the

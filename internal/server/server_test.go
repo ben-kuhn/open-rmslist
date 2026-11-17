@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -24,7 +25,11 @@ func newTestServer(t *testing.T, stations []catalog.Station) *Server {
 		Version:      "test",
 		ServiceCodes: []string{"PUBLIC"},
 		ModeSwaps:    catalog.DefaultModeSwaps,
-	}, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}, loader, heur)
+	}, fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<link rel="stylesheet" href="style.css"><script src="app.js"></script>`)},
+		"app.js":     &fstest.MapFile{Data: []byte("//app")},
+		"style.css":  &fstest.MapFile{Data: []byte("/*css*/")},
+	}, loader, heur)
 	s.stations = stations
 	return s
 }
@@ -251,5 +256,18 @@ func TestHandleConditions(t *testing.T) {
 	var c propagation.Conditions
 	if err := json.Unmarshal(rec.Body.Bytes(), &c); err != nil {
 		t.Fatalf("conditions response not valid JSON: %v", err)
+	}
+}
+
+func TestServeIndexVersioned(t *testing.T) {
+	s := newTestServer(t, fixture())
+	rec := httptest.NewRecorder()
+	s.serveIndex(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := rec.Body.String()
+	if !strings.Contains(body, "app.js?v=") || !strings.Contains(body, "style.css?v=") {
+		t.Errorf("index not cache-busted: %s", body)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Errorf("Cache-Control = %q, want no-cache", got)
 	}
 }
