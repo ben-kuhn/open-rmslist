@@ -8,29 +8,12 @@ import (
 	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
 )
 
-// ModeSwap renames a leading mode token for channels whose service code
-// matches. Community modems (Mercury, VardeFM, ...) speak VARA's modem API,
-// so the Winlink feed advertises them as "VARA"/"VARA FM" while their actual
-// identity is carried in the service code.
-type ModeSwap struct {
-	ServiceCode string `json:"service_code"`
-	From        string `json:"from"` // leading mode token(s) to match
-	To          string `json:"to"`   // replacement token(s)
-}
-
-// DefaultModeSwaps are the known community modem relabelings.
-var DefaultModeSwaps = []ModeSwap{
-	// MERCURY gateways are Mercury HF modems advertised as "VARA".
-	{ServiceCode: "MERCURY", From: "VARA", To: "Mercury"},
-	// VardeFM gateways are VARA FM-compatible modems advertised as "VARA FM".
-	{ServiceCode: "VardeFM", From: "VARA FM", To: "VardeFM"},
-}
-
-// Channel is a normalized, display-ready channel.
+// Channel is a normalized, display-ready channel. Mode is exactly what the
+// Winlink API reports; the service code is the authoritative label for
+// Mercury/VardeFM and other community groups.
 type Channel struct {
 	ServiceCode    string  `json:"service_code"`
-	Mode           string  `json:"mode"`        // relabeled mode (e.g. "Mercury 500")
-	RawMode        string  `json:"raw_mode"`    // as reported by Winlink
+	Mode           string  `json:"mode"`        // as reported by Winlink
 	ModeFamily     string  `json:"mode_family"` // VARA, VARA FM, ARDOP, Packet, ...
 	FrequencyHz    float64 `json:"frequency_hz"`
 	Frequency      string  `json:"frequency"` // human readable
@@ -55,8 +38,8 @@ type Station struct {
 }
 
 // Normalize converts the raw feed into a flat list of stations, sorted by
-// callsign, with modes relabeled according to the swap rules.
-func Normalize(status *cmsapi.GatewayStatus, swaps []ModeSwap) []Station {
+// callsign, preserving the mode and service code exactly as reported.
+func Normalize(status *cmsapi.GatewayStatus) []Station {
 	if status == nil {
 		return nil
 	}
@@ -73,7 +56,7 @@ func Normalize(status *cmsapi.GatewayStatus, swaps []ModeSwap) []Station {
 			Channels:         make([]Channel, 0, len(gw.Channels)),
 		}
 		for _, ch := range gw.Channels {
-			st.Channels = append(st.Channels, normalizeChannel(ch, swaps))
+			st.Channels = append(st.Channels, normalizeChannel(ch))
 		}
 		stations = append(stations, st)
 	}
@@ -83,17 +66,14 @@ func Normalize(status *cmsapi.GatewayStatus, swaps []ModeSwap) []Station {
 	return stations
 }
 
-func normalizeChannel(ch cmsapi.GatewayChannel, swaps []ModeSwap) Channel {
-	raw := strings.TrimSpace(ch.SupportedModes)
-	mode := raw
+func normalizeChannel(ch cmsapi.GatewayChannel) Channel {
+	mode := strings.TrimSpace(ch.SupportedModes)
 	if mode == "" {
 		mode = "Unknown"
 	}
-	mode = relabel(mode, ch.ServiceCode, swaps)
 	return Channel{
 		ServiceCode:    strings.ToUpper(strings.TrimSpace(ch.ServiceCode)),
 		Mode:           mode,
-		RawMode:        raw,
 		ModeFamily:     modeFamily(mode),
 		FrequencyHz:    ch.Frequency,
 		Frequency:      formatFrequency(ch.Frequency),
@@ -106,45 +86,6 @@ func normalizeChannel(ch cmsapi.GatewayChannel, swaps []ModeSwap) Channel {
 	}
 }
 
-// relabel applies the swap whose ServiceCode matches the channel's service
-// code. It renames the leading mode token(s) and preserves the remainder.
-// A single-token "VARA" swap deliberately leaves "VARA FM"/"VARA FM WIDE"
-// untouched (those are FM, not HF).
-func relabel(mode, serviceCode string, swaps []ModeSwap) string {
-	sc := strings.ToUpper(serviceCode)
-	for _, s := range swaps {
-		if !strings.EqualFold(s.ServiceCode, sc) {
-			continue
-		}
-		fields := strings.Fields(mode)
-		if len(fields) == 0 {
-			continue
-		}
-		fromFields := strings.Fields(s.From)
-		if len(fromFields) == 0 || len(fromFields) > len(fields) {
-			continue
-		}
-		// A "VARA" -> X swap should not relabel VARA FM.
-		if len(fromFields) == 1 && strings.EqualFold(fromFields[0], "VARA") &&
-			len(fields) > 1 && strings.EqualFold(fields[1], "FM") {
-			continue
-		}
-		match := true
-		for i := range fromFields {
-			if !strings.EqualFold(fields[i], fromFields[i]) {
-				match = false
-				break
-			}
-		}
-		if !match {
-			continue
-		}
-		out := append([]string{s.To}, fields[len(fromFields):]...)
-		return strings.Join(out, " ")
-	}
-	return mode
-}
-
 func modeFamily(mode string) string {
 	m := strings.ToUpper(mode)
 	switch {
@@ -152,10 +93,6 @@ func modeFamily(mode string) string {
 		return "VARA FM"
 	case strings.HasPrefix(m, "VARA"):
 		return "VARA"
-	case strings.HasPrefix(m, "MERCURY"):
-		return "Mercury"
-	case strings.HasPrefix(m, "VARDEFM"):
-		return "VardeFM"
 	case strings.HasPrefix(m, "ARDOP"):
 		return "ARDOP"
 	case strings.HasPrefix(m, "PACKET"):

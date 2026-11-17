@@ -6,35 +6,10 @@ import (
 	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
 )
 
-func TestRelabel(t *testing.T) {
-	cases := []struct{ serviceCode, mode, want string }{
-		// MERCURY is a Mercury HF modem advertised as VARA.
-		{"MERCURY", "VARA", "Mercury"},
-		{"MERCURY", "VARA 500", "Mercury 500"},
-		{"MERCURY", "VARA 2750", "Mercury 2750"},
-		// ...but VARA FM stays VARA FM (not an HF Mercury mode).
-		{"MERCURY", "VARA FM", "VARA FM"},
-		{"MERCURY", "VARA FM WIDE", "VARA FM WIDE"},
-		// VardeFM replaces VARA FM.
-		{"VardeFM", "VARA FM", "VardeFM"},
-		{"VardeFM", "VARA FM WIDE", "VardeFM WIDE"},
-		// VardeFM does not touch VARA HF.
-		{"VardeFM", "VARA", "VARA"},
-		// Unrelated service codes and modes are untouched.
-		{"PUBLIC", "VARA", "VARA"},
-		{"MERCURY", "ARDOP 500", "ARDOP 500"},
-	}
-	for _, c := range cases {
-		if got := relabel(c.mode, c.serviceCode, DefaultModeSwaps); got != c.want {
-			t.Errorf("relabel(%q, %q) = %q, want %q", c.mode, c.serviceCode, got, c.want)
-		}
-	}
-}
-
 func TestModeFamily(t *testing.T) {
 	cases := map[string]string{
 		"VARA": "VARA", "VARA FM": "VARA FM", "VARA FM WIDE": "VARA FM",
-		"Mercury": "Mercury", "VardeFM": "VardeFM", "ARDOP 2000": "ARDOP",
+		"ARDOP 2000":  "ARDOP",
 		"Packet 1200": "Packet", "Pactor 3": "PACTOR", "Robust Packet": "Robust Packet",
 		"WINMOR 1600": "WINMOR", "Unknown": "Other",
 	}
@@ -93,7 +68,7 @@ func TestNormalize(t *testing.T) {
 		}},
 	}}}
 
-	stations := Normalize(status, DefaultModeSwaps)
+	stations := Normalize(status)
 	if len(stations) != 1 {
 		t.Fatalf("got %d stations", len(stations))
 	}
@@ -101,8 +76,8 @@ func TestNormalize(t *testing.T) {
 	if ch.ServiceCode != "MERCURY" {
 		t.Errorf("ServiceCode = %q, want MERCURY (uppercased)", ch.ServiceCode)
 	}
-	if ch.Mode != "Mercury" {
-		t.Errorf("Mode = %q, want Mercury (relabeled)", ch.Mode)
+	if ch.Mode != "VARA" {
+		t.Errorf("Mode = %q, want VARA (as reported)", ch.Mode)
 	}
 	if ch.Band != "40m" {
 		t.Errorf("Band = %q, want 40m", ch.Band)

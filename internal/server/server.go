@@ -29,7 +29,6 @@ type Config struct {
 	Version          string
 	ServiceCodes     []string
 	HistoryHours     int
-	ModeSwaps        []catalog.ModeSwap
 	VOACAPURL        string
 	VOACAPExecutable string
 	VOACAPDataDir    string
@@ -109,7 +108,7 @@ func (s *Server) Refresh(ctx context.Context) error {
 	if err := json.Unmarshal(data, &status); err != nil {
 		return err
 	}
-	stations := catalog.Normalize(&status, s.cfg.ModeSwaps)
+	stations := catalog.Normalize(&status)
 	s.stationsMu.Lock()
 	s.stations = stations
 	s.stationsMu.Unlock()
@@ -237,7 +236,6 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"version":       s.cfg.Version,
 		"service_codes": s.cfg.ServiceCodes,
-		"mode_swaps":    s.cfg.ModeSwaps,
 		"voacap":        s.voacapEnabled,
 		"tile_url":      proxyTilePath,
 	})

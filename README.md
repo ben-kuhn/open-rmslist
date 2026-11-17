@@ -10,8 +10,9 @@ stations by predicted link success using current propagation conditions.
 
 - **Dark mode (default) and light mode**
 - **Service-code dropdown** populated from the fetched gateway list
-- **Mode relabeling** — MERCURY gateways show as *Mercury*, VardeFM as
-  *VardeFM*, instead of the `VARA` / `VARA FM` they advertise as
+- **Service-code aware** — gateways are shown and filtered by the Winlink
+  service code the API returns (`PUBLIC`, `EMCOMM`, `MERCURY`, `VARDEFM`, …);
+  modes are shown exactly as the API reports them
 - **Propagation ranking** — pick your grid, band, and mode; stations are
   scored and highlighted by predicted link quality. While ranking, 0% VHF/UHF
   paths are hidden as implausible. HF stations are kept regardless of score.
@@ -23,10 +24,11 @@ stations by predicted link success using current propagation conditions.
 ## Why
 
 The Winlink gateway list advertises community modems by their *VARA-compatible*
-API: a Mercury HF modem is listed as `VARA`, a VardeFM modem as `VARA FM`, with
-the real identity carried only in the service code (`MERCURY`, `VardeFM`, …).
-`open-rmslist` surfaces those stations under their real names and makes them
-discoverable on a map and by propagation forecast.
+API: a Mercury HF modem is listed as `VARA`, a VardeFM modem as `VARA FM`, and
+the real identity is carried in the service code (`MERCURY`, `VARDEFM`, …).
+Rather than guessing mode names, `open-rmslist` uses the service codes the API
+returns and shows the advertised modes as-is, so every grouping stays visible
+and filterable.
 
 ## Data source
 
@@ -53,7 +55,7 @@ open <http://localhost:8079> yourself (or pass `-open-browser`).
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
 | `-listen` | `OPENRMSLIST_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
-| `-service-codes` | `OPENRMSLIST_SERVICE_CODES` | `PUBLIC,MERCURY` | Comma-separated service codes to fetch |
+| `-service-codes` | `OPENRMSLIST_SERVICE_CODES` | `PUBLIC,EMCOMM,MERCURY,VARDEFM` | Comma-separated service codes to fetch (no wildcard) |
 | `-refresh` | `OPENRMSLIST_REFRESH` | `1h` | Gateway list refresh interval |
 | `-cache-dir` | `OPENRMSLIST_CACHE_DIR` | `./data` | Cache directory |
 | `-key` | `OPENRMSLIST_KEY` | Pat's community key | Winlink CMS access key |
@@ -69,22 +71,26 @@ open <http://localhost:8079> yourself (or pass `-open-browser`).
 | `-vhf-max-range` | `OPENRMSLIST_VHF_MAX_RANGE` | `400` | Max plausible VHF/UHF path (km) for ranking — distance-based, not continent-based; set large to disable |
 | `-open-browser` | `OPENRMSLIST_OPEN_BROWSER` | macOS/Windows: `true`, else `false` | Open the browser on start |
 
-### Mode swaps
+### Service codes
 
-Mode relabeling is driven by each channel's service code. The built-in defaults
-are:
+The service-code dropdown is built from the codes present in the fetched data,
+and the mode dropdown shows the modes those channels advertise. There is no mode
+rewriting: a `MERCURY` channel is labelled by its service code, and its mode is
+shown exactly as the API reports it (`VARA`, `VARA 500`, …).
 
-| Service code | Swap |
-|--------------|------|
-| `MERCURY` | `VARA` / `VARA 500` / `VARA 2750` → `Mercury` (VARA FM is left alone) |
-| `VardeFM` | `VARA FM` / `VARA FM WIDE` → `VardeFM` |
+The Winlink API has no wildcard for service codes, so `-service-codes` lists the
+codes to request. The default is the set the API currently serves:
 
-`MERCURY` is fetched by default. The `VardeFM` rule is inert until a `VardeFM`
-gateway actually exists — the service-code dropdown is populated from real
-gateway data, so add `VardeFM` to `-service-codes` once you see nodes using it.
+| Code | Notes |
+|------|-------|
+| `PUBLIC` | maritime and open amateur gateways |
+| `EMCOMM` | emergency gateways that do not allow public access |
+| `MERCURY` | Mercury HF gateways |
+| `VARDEFM` | VardeFM gateways |
 
-Extend `catalog.DefaultModeSwaps` in `internal/catalog/catalog.go` for other
-service codes.
+Add any private group code you are entitled to with
+`-service-codes PUBLIC,MYGROUP` (or `OPENRMSLIST_SERVICE_CODES`); codes with no
+gateways simply contribute nothing.
 
 ## Propagation
 
@@ -171,7 +177,7 @@ configuring it.
 | `GET /api/servicecodes` | Distinct service codes present in the data |
 | `GET /api/conditions` | Current solar + MUF summary |
 | `POST /api/rank` | Ranked stations for a grid/band/mode |
-| `GET /api/config` | Service codes, version, mode swaps |
+| `GET /api/config` | Service codes, version, VOACAP status, tile URL |
 
 ## Platform support & packaging
 

@@ -25,7 +25,6 @@ func newTestServer(t *testing.T, stations []catalog.Station) *Server {
 	s := New(Config{
 		Version:      "test",
 		ServiceCodes: []string{"PUBLIC"},
-		ModeSwaps:    catalog.DefaultModeSwaps,
 		TileCacheDir: t.TempDir(),
 	}, fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte(`<link rel="stylesheet" href="style.css"><script src="app.js"></script>`)},
@@ -214,7 +213,7 @@ func TestServerRefresh(t *testing.T) {
 	loader := cmsapi.NewLoader(dir, []string{"PUBLIC"}, 48, "k")
 	loader.Seed() // embedded snapshot
 	heur := propagation.NewHeuristic(dir)
-	s := New(Config{Version: "test", ServiceCodes: []string{"PUBLIC"}, ModeSwaps: catalog.DefaultModeSwaps},
+	s := New(Config{Version: "test", ServiceCodes: []string{"PUBLIC"}},
 		fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}, loader, heur)
 
 	if err := s.Refresh(context.Background()); err != nil {

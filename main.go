@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/ben-kuhn/open-rmslist/internal/browser"
-	"github.com/ben-kuhn/open-rmslist/internal/catalog"
 	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
 	"github.com/ben-kuhn/open-rmslist/internal/propagation"
 	"github.com/ben-kuhn/open-rmslist/internal/server"
@@ -33,7 +32,7 @@ var webFS embed.FS
 func main() {
 	var (
 		addr         = flag.String("listen", envOr("OPENRMSLIST_LISTEN", "127.0.0.1:8079"), "HTTP listen address (use 0.0.0.0:8079 to serve the LAN)")
-		serviceCodes = flag.String("service-codes", envOr("OPENRMSLIST_SERVICE_CODES", "PUBLIC,MERCURY"), "comma-separated Winlink service codes to fetch")
+		serviceCodes = flag.String("service-codes", envOr("OPENRMSLIST_SERVICE_CODES", "PUBLIC,EMCOMM,MERCURY,VARDEFM"), "comma-separated Winlink service codes to fetch (the API accepts explicit codes; there is no wildcard)")
 		refresh      = flag.Duration("refresh", envDuration("OPENRMSLIST_REFRESH", 1*time.Hour), "gateway list refresh interval")
 		cacheDir     = flag.String("cache-dir", envOr("OPENRMSLIST_CACHE_DIR", "./data"), "cache directory for gateway list and propagation data")
 		accessKey    = flag.String("key", envOr("OPENRMSLIST_KEY", cmsapi.DefaultAccessKey), "Winlink CMS access key")
@@ -80,7 +79,6 @@ func main() {
 		Version:          version,
 		ServiceCodes:     codes,
 		HistoryHours:     *historyHours,
-		ModeSwaps:        catalog.DefaultModeSwaps,
 		VOACAPURL:        *voacapURL,
 		VOACAPExecutable: *voacapExec,
 		VOACAPDataDir:    *voacapData,
