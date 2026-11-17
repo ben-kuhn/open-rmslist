@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <title>open-rmslist — Winlink gateway map</title>
+<script src="theme.js"></script>
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -17,7 +18,8 @@
     <a href="https://winlink.org/RMSChannels" target="_blank" rel="noopener noreferrer">winlink.org</a>.
     Winlink advertises community modems (Mercury, VardeFM, …) as VARA / VARA FM
     and identifies them only by <b>service code</b>, so this map makes those
-    gateways discoverable and rankable by service code, band, and mode.
+    gateways discoverable and rankable by service code, band, and mode. See the
+    <a href="clients.html">client setup guide</a>.
   </div>
   <button class="notice-close" id="notice-close" type="button" aria-label="Dismiss notice">✕</button>
 </section>
@@ -40,6 +42,7 @@
     </label>
     <button id="rank-btn" class="btn btn-primary" title="Rank stations by predicted link success">Rank</button>
     <button id="theme-btn" class="btn btn-icon" title="Toggle dark/light" aria-label="Toggle theme">◐</button>
+    <a class="toplink" href="clients.html">Client setup</a>
   </div>
 
   <div class="status" id="status">loading…</div>

@@ -46,3 +46,12 @@ test("deployed API endpoints respond", async ({ request }) => {
   const health = await (await request.get(BASE + "/api/health")).json();
   expect(health.ok).toBe(true);
 });
+
+test("client setup guide is served", async ({ page }) => {
+  const res = await page.goto(BASE + "/clients.html", { waitUntil: "domcontentloaded" });
+  expect(res.ok()).toBeTruthy();
+  await expect(page.locator("h1")).toContainText("Configuring service codes");
+  for (const name of ["Winlink Express", "PAT", "WoAD", "RadioMail", "HTCommander"]) {
+    await expect(page.locator("h2", { hasText: name })).toHaveCount(1);
+  }
+});

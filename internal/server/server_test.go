@@ -27,9 +27,11 @@ func newTestServer(t *testing.T, stations []catalog.Station) *Server {
 		ServiceCodes: []string{"PUBLIC"},
 		TileCacheDir: t.TempDir(),
 	}, fstest.MapFS{
-		"index.html": &fstest.MapFile{Data: []byte(`<link rel="stylesheet" href="style.css"><script src="app.js"></script>`)},
-		"app.js":     &fstest.MapFile{Data: []byte("//app")},
-		"style.css":  &fstest.MapFile{Data: []byte("/*css*/")},
+		"index.html":   &fstest.MapFile{Data: []byte(`<link rel="stylesheet" href="style.css"><script src="theme.js"></script><script src="app.js"></script>`)},
+		"clients.html": &fstest.MapFile{Data: []byte(`<link rel="stylesheet" href="style.css"><script src="theme.js"></script>`)},
+		"app.js":       &fstest.MapFile{Data: []byte("//app")},
+		"theme.js":     &fstest.MapFile{Data: []byte("//theme")},
+		"style.css":    &fstest.MapFile{Data: []byte("/*css*/")},
 	}, loader, heur)
 	s.stations = stations
 	return s
@@ -266,10 +268,23 @@ func TestHandleConditions(t *testing.T) {
 func TestServeIndexVersioned(t *testing.T) {
 	s := newTestServer(t, fixture())
 	rec := httptest.NewRecorder()
-	s.serveIndex(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	s.serveHTML(rec, httptest.NewRequest(http.MethodGet, "/", nil), "index.html")
 	body := rec.Body.String()
-	if !strings.Contains(body, "app.js?v=") || !strings.Contains(body, "style.css?v=") {
+	if !strings.Contains(body, "app.js?v=") || !strings.Contains(body, "style.css?v=") || !strings.Contains(body, "theme.js?v=") {
 		t.Errorf("index not cache-busted: %s", body)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Errorf("Cache-Control = %q, want no-cache", got)
+	}
+}
+
+func TestServeClientsVersioned(t *testing.T) {
+	s := newTestServer(t, fixture())
+	rec := httptest.NewRecorder()
+	s.serveHTML(rec, httptest.NewRequest(http.MethodGet, "/clients.html", nil), "clients.html")
+	body := rec.Body.String()
+	if !strings.Contains(body, "style.css?v=") || !strings.Contains(body, "theme.js?v=") {
+		t.Errorf("clients page not cache-busted: %s", body)
 	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
 		t.Errorf("Cache-Control = %q, want no-cache", got)

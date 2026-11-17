@@ -13,6 +13,8 @@ stations by predicted link success using current propagation conditions.
 - **Service-code aware** — gateways are shown and filtered by the Winlink
   service code the API returns (`PUBLIC`, `EMCOMM`, `MERCURY`, `VARDEFM`, …);
   modes are shown exactly as the API reports them
+- **Client setup guide** — a static page explains how to add service codes in
+  Winlink Express, PAT, WoAD, RadioMail, and HTCommander
 - **Propagation ranking** — pick your grid, band, and mode; stations are
   scored and highlighted by predicted link quality. While ranking, 0% VHF/UHF
   paths are hidden as implausible. HF stations are kept regardless of score.
@@ -91,6 +93,10 @@ codes to request. The default is the set the API currently serves:
 Add any private group code you are entitled to with
 `-service-codes PUBLIC,MYGROUP` (or `OPENRMSLIST_SERVICE_CODES`); codes with no
 gateways simply contribute nothing.
+
+A per-client setup guide is served at `/clients.html` (source:
+`web/clients.html`), covering Winlink Express, PAT, WoAD, RadioMail, and
+HTCommander.
 
 ## Propagation
 

@@ -99,6 +99,15 @@ body {
   margin-left: auto;
 }
 
+.toplink {
+  align-self: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.toplink:hover, .toplink:focus-visible { color: var(--accent); text-decoration: underline; }
+
 .field {
   display: flex;
   flex-direction: column;
@@ -259,3 +268,26 @@ select:focus, input:focus { outline: none; border-color: var(--accent); }
   .layout { flex-direction: column; }
   #map { height: 45vh; }
 }
+
+/* ---- docs page (clients.html) ---- */
+body.doc-body { display: block; overflow: auto; height: auto; min-height: 100%; }
+.doc { max-width: 820px; margin: 0 auto; padding: 26px 18px 64px; line-height: 1.55; }
+.doc h1 { font-size: 24px; line-height: 1.25; margin: 0 0 6px; }
+.doc h2 { font-size: 18px; margin: 32px 0 8px; padding-top: 14px; border-top: 1px solid var(--border); }
+.doc p, .doc li { font-size: 14px; }
+.doc ol, .doc ul { padding-left: 22px; }
+.doc li { margin: 5px 0; }
+.doc a { color: var(--accent); }
+.doc code { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 12.5px; }
+.doc pre { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; overflow: auto; }
+.doc pre code { background: transparent; border: 0; padding: 0; }
+.doc-note { background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: 4px; padding: 10px 14px; margin: 18px 0; }
+.doc-note p { margin: 0; }
+.doc-os { margin-left: 6px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-dim); }
+p.doc-back { margin: 0 0 10px; font-size: 13px; }
+p.doc-sub { margin: 0 0 22px; color: var(--text-dim); font-size: 14px; }
+p.doc-more { color: var(--text-dim); font-size: 13px; }
+p.doc-foot { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 12px; }
+.doc-table { width: 100%; border-collapse: collapse; margin: 8px 0 4px; font-size: 13.5px; }
+.doc-table th, .doc-table td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.doc-table th { color: var(--text-dim); font-weight: 600; }

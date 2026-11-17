@@ -85,12 +85,12 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 	}
 }
 
-// assetVersion returns a short hash of the mutable web assets. When app.js or
-// style.css changes, the hash changes and the HTML points at a new URL, which
-// bypasses CDN edge caches (which ignore a browser hard-refresh).
+// assetVersion returns a short hash of the mutable web assets. When app.js,
+// theme.js, or style.css changes, the hash changes and the HTML points at a new
+// URL, which bypasses CDN edge caches (which ignore a browser hard-refresh).
 func assetVersion(web fs.FS) string {
 	h := sha256.New()
-	for _, name := range []string{"app.js", "style.css", "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css"} {
+	for _, name := range []string{"app.js", "theme.js", "style.css", "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css"} {
 		if b, err := fs.ReadFile(web, name); err == nil {
 			_, _ = h.Write(b)
 		}
@@ -129,7 +129,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/", "/index.html":
-			s.serveIndex(w, r)
+			s.serveHTML(w, r, "index.html")
+		case "/clients.html":
+			s.serveHTML(w, r, "clients.html")
 		default:
 			// Content-hashed (?v=) assets can be cached for a few days: a new
 			// build changes the hash, so the HTML always points at fresh URLs.
@@ -145,10 +147,10 @@ func (s *Server) Handler() http.Handler {
 	return securityHeaders(mux)
 }
 
-// serveIndex renders index.html with content-hashed asset URLs and no-cache, so
-// a fresh HTML page always points at fresh JS/CSS even behind an aggressive CDN.
-func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request) {
-	b, err := fs.ReadFile(s.web, "index.html")
+// serveHTML renders an HTML page with content-hashed asset URLs and no-cache,
+// so a fresh page always points at fresh JS/CSS even behind an aggressive CDN.
+func (s *Server) serveHTML(w http.ResponseWriter, r *http.Request, page string) {
+	b, err := fs.ReadFile(s.web, page)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -158,6 +160,7 @@ func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request) {
 		v := s.assetVersion
 		html = strings.ReplaceAll(html, `href="style.css"`, `href="style.css?v=`+v+`"`)
 		html = strings.ReplaceAll(html, `src="app.js"`, `src="app.js?v=`+v+`"`)
+		html = strings.ReplaceAll(html, `src="theme.js"`, `src="theme.js?v=`+v+`"`)
 		html = strings.ReplaceAll(html, `href="vendor/leaflet/leaflet.css"`, `href="vendor/leaflet/leaflet.css?v=`+v+`"`)
 		html = strings.ReplaceAll(html, `src="vendor/leaflet/leaflet.js"`, `src="vendor/leaflet/leaflet.js?v=`+v+`"`)
 	}

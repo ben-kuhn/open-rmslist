@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Client setup — Winlink Gateway Map</title>
+<script src="theme.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="doc-body">
+<main class="doc">
+  <p class="doc-back"><a href="./">← Back to the map</a></p>
+
+  <h1>Configuring service codes in Winlink clients</h1>
+  <p class="doc-sub">
+    Winlink clients only list gateways for the service codes you configure. If a
+    Mercury, VardeFM, or EMCOMM gateway is missing from your client, add its code
+    there.
+  </p>
+
+  <div class="doc-note">
+    <p>
+      <strong>Service codes group gateway channels.</strong> The Winlink API
+      returns channels for the codes you ask for, and it has no wildcard. Only add
+      codes you are entitled to use. Adding a code changes which gateways your
+      client <em>lists</em> — you still need the matching mode or modem to connect.
+    </p>
+  </div>
+
+  <h2>What the codes mean</h2>
+  <table class="doc-table">
+    <thead>
+      <tr><th>Code</th><th>Meaning</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>PUBLIC</code></td><td>Maritime and open amateur gateways, including emergency gateways that allow public access. This is the default in most clients.</td></tr>
+      <tr><td><code>EMCOMM</code></td><td>Emergency gateways that do not allow public access.</td></tr>
+      <tr><td><code>MERCURY</code></td><td>Mercury HF community modems. Winlink advertises these channels as VARA.</td></tr>
+      <tr><td><code>VARDEFM</code></td><td>VardeFM community modems. Winlink advertises these channels as VARA (on VHF/UHF).</td></tr>
+      <tr><td><em>other</em></td><td>Private group codes. The Winlink team does not publish them — ask your group.</td></tr>
+    </tbody>
+  </table>
+  <p class="doc-more">
+    The official description is on
+    <a href="https://winlink.org/content/gateway_channels" target="_blank" rel="noopener noreferrer">Winlink — Gateway Channels</a>.
+  </p>
+
+  <h2>Winlink Express <span class="doc-os">Windows</span></h2>
+  <ol>
+    <li>Open <strong>Settings → Winlink Express Setup</strong>.</li>
+    <li>In the <strong>Service Codes</strong> field, enter the codes separated by spaces — for example <code>PUBLIC EMCOMM</code>, or <code>PUBLIC EMCOMM MERCURY VARDEFM</code>.</li>
+    <li>Click <strong>Update</strong>.</li>
+    <li>Update the channel list. Winlink Express notes that changing service codes requires updating the list of channels.</li>
+  </ol>
+  <p class="doc-more">
+    More information:
+    <a href="https://winlink.org/sites/default/files/RMSE_FORMS/quick_setup_guide_for_winlink_sound_card_packet_for_vhf-uhf_on_windows_v1.3.pdf" target="_blank" rel="noopener noreferrer">Winlink quick setup guide (PDF)</a>
+    · <a href="https://winlink.org/content/gateway_channels" target="_blank" rel="noopener noreferrer">Gateway Channels</a>.
+  </p>
+
+  <h2>PAT <span class="doc-os">Linux · macOS · Windows</span></h2>
+  <ol>
+    <li>Run <code>pat configure</code> (or edit the configuration file it opens).</li>
+    <li>Set the <code>service_codes</code> array, for example:
+      <pre><code>"service_codes": ["PUBLIC", "EMCOMM", "MERCURY", "VARDEFM"]</code></pre>
+    </li>
+    <li>Save and restart PAT. <code>pat rmslist</code> and the web UI's gateway list use these codes.</li>
+  </ol>
+  <p class="doc-more">
+    The default is <code>["PUBLIC"]</code>. More information:
+    <a href="https://getpat.io/" target="_blank" rel="noopener noreferrer">getpat.io</a>
+    · <a href="https://github.com/la5nta/pat/blob/master/cfg/config.go" target="_blank" rel="noopener noreferrer">PAT configuration source</a>.
+  </p>
+
+  <h2>WoAD <span class="doc-os">Android</span></h2>
+  <ol>
+    <li>Open a session's <strong>RMS Channel Selection</strong> screen: edit a session → <strong>Destination address → RMS Channel Selection…</strong>.</li>
+    <li>In the lower menu, choose <strong>Service Codes</strong>.</li>
+    <li>Enter one code per line, or separate them with spaces — for example <code>PUBLIC EMCOMM MERCURY VARDEFM</code>.</li>
+    <li>Go back and choose <strong>Update via internet</strong> so the channel list reflects the new codes.</li>
+  </ol>
+  <p class="doc-more">
+    More information:
+    <a href="https://woad.sumusltd.com/documentation" target="_blank" rel="noopener noreferrer">WoAD documentation</a>
+    (see <em>RMS Channel Selection → Service Codes</em>).
+  </p>
+
+  <h2>RadioMail <span class="doc-os">iPhone · iPad · Apple silicon Mac</span></h2>
+  <ol>
+    <li>Open <strong>Settings → Stations → Directory</strong>.</li>
+    <li>Under <strong>Service codes</strong>, list the additional codes you want, for example <code>EMCOMM, MERCURY, VARDEFM</code>.</li>
+    <li>Non-public codes appear as a small label on directory rows and in the session picker.</li>
+  </ol>
+  <p class="doc-more">
+    More information:
+    <a href="https://islandmagic.co/pdfs/radiomail-v2.0.pdf" target="_blank" rel="noopener noreferrer">RadioMail manual (PDF, §11.6)</a>
+    · <a href="https://radiomail.app/" target="_blank" rel="noopener noreferrer">radiomail.app</a>.
+  </p>
+
+  <h2>HTCommander <span class="doc-os">Windows · macOS · Linux · Android · iOS · web</span></h2>
+  <p>
+    HTCommander's Winlink support is built around a bundled, offline directory of
+    <strong>PUBLIC</strong> 1200-baud packet and VARA-FM gateways. Its
+    documentation does not describe a service-code setting, so
+    <code>MERCURY</code>, <code>VARDEFM</code>, and <code>EMCOMM</code> channels
+    will not appear in its directory — use this map to find those gateways.
+  </p>
+  <p class="doc-more">
+    More information:
+    <a href="https://ylianst.github.io/HTCommanderSite/features/winlink.html" target="_blank" rel="noopener noreferrer">HTCommander Winlink docs</a>
+    · <a href="https://github.com/Ylianst/HTCommander/blob/main/docs/Winlink-Gateways.md" target="_blank" rel="noopener noreferrer">offline gateway directory</a>.
+  </p>
+
+  <h2>About this list</h2>
+  <p>
+    This map is unofficial and not affiliated with the Winlink Development Team or
+    ARSFI. It fetches <code>PUBLIC</code>, <code>EMCOMM</code>, <code>MERCURY</code>,
+    and <code>VARDEFM</code> from Winlink's public gateway API by default; the
+    service-code dropdown shows the codes present in the returned data. The official
+    gateway list and map are at
+    <a href="https://winlink.org/RMSChannels" target="_blank" rel="noopener noreferrer">winlink.org/RMSChannels</a>.
+  </p>
+
+  <p class="doc-foot"><a href="./">← Back to the map</a></p>
+</main>
+</body>
+</html>
