@@ -83,7 +83,7 @@ test("mobile map/list tabs with a scrollable list", async ({ page, request }) =>
   await page.locator("#list li", { hasText: target.callsign }).first().click();
   await expect(page.locator("#map")).toBeVisible();
   await expect(page.locator("#list-panel")).toBeHidden();
-  await expect(page.locator(".leaflet-popup-content")).toContainText("KU0HN-10");
+  await expect(page.locator(".leaflet-popup-content")).toContainText(target.callsign);
 });
 
 test("gateway setup guide is served", async ({ page }) => {
