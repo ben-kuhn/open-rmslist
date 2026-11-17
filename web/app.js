@@ -14,6 +14,13 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 const BAND_ORDER = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m","6m","2m","1.25m","70cm","33cm","23cm","HF","Other"];
+
+// VHF/UHF starts at 30 MHz (6 m and up). For these line-of-sight bands a 0%
+// score means the path is implausible; on HF a 0% can be a temporary/forecast
+// condition, so HF stations are never dropped.
+const VHF_MIN_HZ = 30e6;
+const VHF_BANDS = new Set(["6m", "2m", "1.25m", "70cm", "33cm", "23cm"]);
+const isHfChannel = (c) => !(c.frequency_hz >= VHF_MIN_HZ || VHF_BANDS.has(c.band));
 const MODE_ORDER = ["VARA","VARA FM","Mercury","VardeFM","ARDOP","Packet","PACTOR","Robust Packet","WINMOR","Other"];
 
 /* ---------- theme ---------- */
@@ -172,7 +179,18 @@ function filteredStations() {
 }
 
 function applyFilters() {
-  const stations = filteredStations();
+  let stations = filteredStations();
+  if (state.ranked.size) {
+    // Ranking is active. For VHF/UHF (line-of-sight) hide 0% and unscored
+    // stations so the list/map only show plausibly-workable paths. HF stations
+    // are kept regardless of score (0% may just be a temporary condition).
+    stations = stations.filter((st) => {
+      const hfCapable = st.channels.some(isHfChannel);
+      const r = state.ranked.get(st.callsign);
+      if (!r) return hfCapable;            // unscored VHF/UHF -> hide
+      return r.link_quality > 0 || hfCapable; // 0% VHF/UHF -> hide unless HF-capable
+    });
+  }
   $("count").textContent = `${stations.length}`;
   renderMarkers(stations);
   renderList(stations);
