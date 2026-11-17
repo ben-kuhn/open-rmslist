@@ -222,7 +222,18 @@ jobs:
           New-Item -ItemType Directory -Force dist-voacap | Out-Null
           New-Item -ItemType Directory -Force work | Out-Null
           # Upstream's official Windows distribution (engine, data, runtime DLL).
-          Invoke-WebRequest -Uri "https://greg-hand.com/versions/itshfbc%20.zap" -OutFile "work/itshfbc.zip"
+          $downloaded = $false
+          foreach ($url in @("https://greg-hand.com/versions/itshfbc%20.zap", "http://greg-hand.com/versions/itshfbc%20.zap")) {
+            for ($i = 0; $i -lt 4 -and -not $downloaded; $i++) {
+              try {
+                Invoke-WebRequest -Uri $url -OutFile "work/itshfbc.zip" -TimeoutSec 60
+                $downloaded = $true
+              } catch {
+                Start-Sleep -Seconds 5
+              }
+            }
+          }
+          if (-not $downloaded) { throw "could not download the upstream VOACAP archive" }
           $expected = "29d3902c695523841dae395db937cda4f154a9e2cbe9aed38f38bd1f98d42e9a"
           $actual = (Get-FileHash "work/itshfbc.zip" -Algorithm SHA256).Hash.ToLower()
           if ($actual -ne $expected) { throw "upstream VOACAP archive SHA-256 mismatch: got $actual" }
