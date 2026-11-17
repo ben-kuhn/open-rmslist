@@ -222,27 +222,27 @@ jobs:
           New-Item -ItemType Directory -Force dist-voacap | Out-Null
           New-Item -ItemType Directory -Force work | Out-Null
           # Upstream's official Windows distribution (engine, data, runtime DLL).
+          # Canonical Windows bundle, built once from the pinned upstream ITS HF
+          # archive and mirrored on our release. Pin its digest so a changed
+          # mirror fails the build; the release workflow signs it anew.
+          $source = "https://github.com/ben-kuhn/rms-radar/releases/download/v0.2.4/voacap-windows-amd64.zip"
+          $expected = "4ba9895b2cee0305017aa3dd1918380bf35cee837772db348bbc50a4241b34e9"
           $downloaded = $false
-          foreach ($url in @("https://greg-hand.com/versions/itshfbc%20.zap", "http://greg-hand.com/versions/itshfbc%20.zap")) {
-            for ($i = 0; $i -lt 4 -and -not $downloaded; $i++) {
-              try {
-                Invoke-WebRequest -Uri $url -OutFile "work/itshfbc.zip" -TimeoutSec 60
-                $downloaded = $true
-              } catch {
-                Start-Sleep -Seconds 5
-              }
+          for ($i = 0; $i -lt 4 -and -not $downloaded; $i++) {
+            try {
+              Invoke-WebRequest -Uri $source -OutFile "dist-voacap/voacap-windows-amd64.zip" -TimeoutSec 120
+              $downloaded = $true
+            } catch {
+              Start-Sleep -Seconds 5
             }
           }
-          if (-not $downloaded) { throw "could not download the upstream VOACAP archive" }
-          $expected = "29d3902c695523841dae395db937cda4f154a9e2cbe9aed38f38bd1f98d42e9a"
-          $actual = (Get-FileHash "work/itshfbc.zip" -Algorithm SHA256).Hash.ToLower()
-          if ($actual -ne $expected) { throw "upstream VOACAP archive SHA-256 mismatch: got $actual" }
-          Expand-Archive -Path "work/itshfbc.zip" -DestinationPath "work/win"
-          if (-not (Test-Path "work/win/itshfbc/bin_win/voacapw.exe")) { throw "voacapw.exe missing from upstream archive" }
-          if (-not (Test-Path "work/win/itshfbc/bin_win/SALFLIBC.DLL")) { throw "SALFLIBC.DLL missing from upstream archive" }
-          Compress-Archive -Path "work/win/itshfbc" -DestinationPath "dist-voacap/voacap-windows-amd64.zip" -Force
-          $hash = (Get-FileHash "dist-voacap/voacap-windows-amd64.zip" -Algorithm SHA256).Hash.ToLower()
-          "$hash  voacap-windows-amd64.zip" | Out-File -FilePath "dist-voacap/voacap-windows-amd64.zip.sha256" -Encoding ascii
+          if (-not $downloaded) { throw "could not download the canonical VOACAP Windows bundle" }
+          $actual = (Get-FileHash "dist-voacap/voacap-windows-amd64.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) { throw "canonical VOACAP Windows bundle SHA-256 mismatch: got $actual" }
+          Expand-Archive -Path "dist-voacap/voacap-windows-amd64.zip" -DestinationPath "work/win"
+          if (-not (Test-Path "work/win/itshfbc/bin_win/voacapw.exe")) { throw "voacapw.exe missing from bundle" }
+          if (-not (Test-Path "work/win/itshfbc/bin_win/SALFLIBC.DLL")) { throw "SALFLIBC.DLL missing from bundle" }
+          "$expected  voacap-windows-amd64.zip" | Out-File -FilePath "dist-voacap/voacap-windows-amd64.zip.sha256" -Encoding ascii
       - name: smoke-test the engine
         shell: pwsh
         env:

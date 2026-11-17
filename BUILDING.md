@@ -66,10 +66,11 @@ BASE_URL=http://localhost:8079 npx playwright test
 - `scripts/build-desktop.sh` — native desktop artifact for the current OS:
   macOS `.app` zip, Windows `.exe` zip, Linux tarball + `.desktop` (`dist-desktop/`).
 - `scripts/build-voacap.sh` — self-contained VOACAP engine bundle for the
-  current Linux/macOS host (`dist-voacap/`); the release workflow also assembles
-  the Windows bundle from the pinned upstream distribution, then signs every
-  bundle with minisign. Desktop builds download and verify these bundles on
-  first launch.
+  current Linux/macOS host (`dist-voacap/`), with a pinned upstream source
+  hash. The Windows bundle was built once from the pinned upstream ITS HF
+  distribution and is mirrored at the v0.2.4 release; CI/release pin and verify
+  that mirror's digest, then sign every bundle with minisign. Desktop builds
+  download and verify these bundles on first launch.
 - `scripts/build-deb.sh <binary> <package> <version> <arch> <web|desktop>` —
   builds a `.deb` from a prebuilt binary.
 - `packaging/arch/PKGBUILD` — Arch package (web/server).
