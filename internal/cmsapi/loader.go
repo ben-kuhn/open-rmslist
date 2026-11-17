@@ -122,7 +122,7 @@ func (l *Loader) cachePath() string {
 	// cache key deterministic while making traversal impossible even if a
 	// caller bypasses SetServiceCodes.
 	sum := sha256.Sum256([]byte(strings.Join(codes, "\x00")))
-	return filepath.Join(l.cacheDir, "gateway_status-"+hex.EncodeToString(sum[:8])+".json")
+	return filepath.Join(l.cacheDir, "gateway_status-"+hex.EncodeToString(sum[:])+".json")
 }
 
 // ServiceCodes returns a copy of the service codes currently requested.
