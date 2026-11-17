@@ -91,3 +91,70 @@ func TestFetchFormEncoding(t *testing.T) {
 		t.Errorf("default HistoryHours = %q", got.Get("HistoryHours"))
 	}
 }
+
+func TestSourceString(t *testing.T) {
+	if SourceNetwork.String() != "network" || SourceCache.String() != "cache" || SourceEmbedded.String() != "embedded" {
+		t.Error("unexpected Source strings")
+	}
+}
+
+func TestRefreshCache(t *testing.T) {
+	dir := t.TempDir()
+	l := NewLoader(dir, []string{"PUBLIC"}, 48, "k")
+	if err := os.WriteFile(l.cachePath(), []byte(`{"Gateways":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Refresh(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	data, src, _ := l.Snapshot()
+	if src != SourceCache || len(data) == 0 {
+		t.Errorf("src = %v, len = %d", src, len(data))
+	}
+}
+
+func TestRefreshNetwork(t *testing.T) {
+	dir := t.TempDir()
+	payload := []byte(`{"Gateways":[{"Callsign":"N0CALL"}]}`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(payload)
+	}))
+	defer srv.Close()
+
+	l := NewLoader(dir, []string{"PUBLIC"}, 48, "k")
+	l.client.baseURL = srv.URL
+	if err := l.Refresh(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	data, src, _ := l.Snapshot()
+	if src != SourceNetwork {
+		t.Errorf("src = %v, want network", src)
+	}
+	if string(data) != string(payload) {
+		t.Errorf("data = %q", data)
+	}
+	if _, err := os.Stat(l.cachePath()); err != nil {
+		t.Errorf("cache not written: %v", err)
+	}
+}
+
+func TestRefreshEmbedded(t *testing.T) {
+	dir := t.TempDir()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	l := NewLoader(dir, []string{"PUBLIC"}, 48, "k")
+	l.client.baseURL = srv.URL
+	if err := l.Refresh(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	data, src, _ := l.Snapshot()
+	if src != SourceEmbedded {
+		t.Errorf("src = %v, want embedded", src)
+	}
+	if len(data) == 0 {
+		t.Error("expected embedded data")
+	}
+}

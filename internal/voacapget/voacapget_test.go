@@ -5,6 +5,11 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -157,5 +162,104 @@ func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestVerifySHA256(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "f")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte("hello"))
+	if err := verifySHA256(path, hex.EncodeToString(sum[:])); err != nil {
+		t.Errorf("matching hash rejected: %v", err)
+	}
+	if err := verifySHA256(path, strings.Repeat("0", 64)); err == nil {
+		t.Error("mismatched hash accepted")
+	}
+}
+
+func buildTarGz(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for name, body := range files {
+		must(t, tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(body)), Typeflag: tar.TypeReg}))
+		_, _ = tw.Write([]byte(body))
+	}
+	must(t, tw.Close())
+	must(t, gz.Close())
+	return buf.Bytes()
+}
+
+func TestFetch(t *testing.T) {
+	archive := buildTarGz(t, map[string]string{
+		"dist/voacapl":              "engine",
+		"dist/itshfbc/coeffs/c.dat": "data",
+	})
+	sum := sha256.Sum256(archive)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	defer srv.Close()
+
+	dest := t.TempDir()
+	exe, data, err := Fetch(context.Background(), srv.URL+"/dist.tar.gz", dest, hex.EncodeToString(sum[:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(exe) != "voacapl" || filepath.Base(data) != "itshfbc" {
+		t.Fatalf("exe=%q data=%q", exe, data)
+	}
+	if _, err := os.Stat(exe); err != nil {
+		t.Errorf("engine missing: %v", err)
+	}
+
+	// Idempotent: the second Fetch must succeed without the server.
+	srv.Close()
+	if e2, d2, err := Fetch(context.Background(), srv.URL+"/dist.tar.gz", dest, ""); err != nil {
+		t.Errorf("cached Fetch failed: %v", err)
+	} else if e2 != exe || d2 != data {
+		t.Errorf("cached paths differ: %q/%q", e2, d2)
+	}
+}
+
+func TestFetchBadHash(t *testing.T) {
+	archive := buildTarGz(t, map[string]string{"dist/voacapl": "engine"})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	defer srv.Close()
+
+	if _, _, err := Fetch(context.Background(), srv.URL+"/dist.tar.gz", t.TempDir(), strings.Repeat("0", 64)); err == nil {
+		t.Error("expected hash-mismatch error")
+	}
+}
+
+func TestExtractTarFile(t *testing.T) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	must(t, tw.WriteHeader(&tar.Header{Name: "d/itshfbc", Mode: 0o755, Typeflag: tar.TypeDir}))
+	must(t, tw.WriteHeader(&tar.Header{Name: "d/itshfbc/coeffs", Mode: 0o755, Typeflag: tar.TypeDir}))
+	body := "x"
+	must(t, tw.WriteHeader(&tar.Header{Name: "d/itshfbc/coeffs/a.dat", Mode: 0o644, Size: int64(len(body)), Typeflag: tar.TypeReg}))
+	_, _ = tw.Write([]byte(body))
+	must(t, tw.Close())
+
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "d.tar")
+	must(t, os.WriteFile(archive, buf.Bytes(), 0o644))
+	dest := filepath.Join(dir, "out")
+	must(t, os.MkdirAll(dest, 0o755))
+	if err := extract(archive, "http://x/d.tar", dest); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFindNoEngine(t *testing.T) {
+	if _, _, err := Find(t.TempDir()); err == nil {
+		t.Error("expected error when no engine is present")
 	}
 }

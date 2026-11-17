@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -179,5 +180,76 @@ func TestParseRangeKm(t *testing.T) {
 	}
 	if got := parseRangeKm("junk"); got != 0 {
 		t.Errorf("parseRangeKm(junk) = %v, want 0", got)
+	}
+}
+
+func TestHandlerRoutes(t *testing.T) {
+	h := newTestServer(t, fixture()).Handler()
+	for _, path := range []string{"/", "/api/health", "/api/gateways", "/api/servicecodes", "/api/conditions", "/api/config"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s = %d, want 200", path, rec.Code)
+		}
+		if rec.Header().Get("Content-Security-Policy") == "" {
+			t.Errorf("%s missing CSP header", path)
+		}
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/nope", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unknown path = %d, want 404", rec.Code)
+	}
+}
+
+func TestServerRefresh(t *testing.T) {
+	dir := t.TempDir()
+	loader := cmsapi.NewLoader(dir, []string{"PUBLIC"}, 48, "k")
+	loader.Seed() // embedded snapshot
+	heur := propagation.NewHeuristic(dir)
+	s := New(Config{Version: "test", ServiceCodes: []string{"PUBLIC"}, ModeSwaps: catalog.DefaultModeSwaps},
+		fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}, loader, heur)
+
+	if err := s.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(s.snapshotStations()); n == 0 {
+		t.Error("Refresh produced no stations from the embedded snapshot")
+	}
+}
+
+func TestHandleHealth(t *testing.T) {
+	s := newTestServer(t, fixture())
+	rec := httptest.NewRecorder()
+	s.handleHealth(rec, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+	var out map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["ok"] != true || out["version"] != "test" {
+		t.Errorf("health = %v", out)
+	}
+}
+
+func TestHandleGateways(t *testing.T) {
+	s := newTestServer(t, fixture())
+	rec := httptest.NewRecorder()
+	s.handleGateways(rec, httptest.NewRequest(http.MethodGet, "/api/gateways", nil))
+	var st []catalog.Station
+	if err := json.Unmarshal(rec.Body.Bytes(), &st); err != nil {
+		t.Fatal(err)
+	}
+	if len(st) != 2 {
+		t.Fatalf("got %d stations, want 2", len(st))
+	}
+}
+
+func TestHandleConditions(t *testing.T) {
+	s := newTestServer(t, fixture())
+	rec := httptest.NewRecorder()
+	s.handleConditions(rec, httptest.NewRequest(http.MethodGet, "/api/conditions", nil))
+	var c propagation.Conditions
+	if err := json.Unmarshal(rec.Body.Bytes(), &c); err != nil {
+		t.Fatalf("conditions response not valid JSON: %v", err)
 	}
 }
