@@ -9,6 +9,7 @@ OpenStreetMap, lets you filter by service code / band / mode, and ranks
 stations by predicted link success using current propagation conditions.
 
 - **Dark mode (default) and light mode**
+- **Mobile-friendly** — on narrow screens, Map/List tabs keep the map visible and the gateway list scrolls in its own pane
 - **Service-code dropdown** populated from the fetched gateway list
 - **Service-code aware** — gateways are shown and filtered by the Winlink
   service code the API returns (`PUBLIC`, `EMCOMM`, `MERCURY`, `VARDEFM`, …);

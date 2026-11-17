@@ -57,10 +57,15 @@
   <span class="cond-note" id="cond-note"></span>
 </section>
 
+<nav class="viewtabs" role="tablist" aria-label="View">
+  <button class="viewtab" id="tab-map" role="tab" type="button" data-view="map" aria-selected="true" aria-controls="map">Map</button>
+  <button class="viewtab" id="tab-list" role="tab" type="button" data-view="list" aria-selected="false" aria-controls="list-panel">List</button>
+</nav>
+
 <div class="layout">
   <div id="map" role="application" aria-label="Gateway map"></div>
 
-  <aside class="panel">
+  <aside class="panel" id="list-panel">
     <div class="panel-head">
       <h2>Gateways <span class="count" id="count"></span></h2>
       <label class="chk"><input type="checkbox" id="rank-mode" checked> highlight ranked</label>

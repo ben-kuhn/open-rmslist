@@ -55,3 +55,28 @@ test("client setup guide is served", async ({ page }) => {
     await expect(page.locator("h2", { hasText: name })).toHaveCount(1);
   }
 });
+
+test("mobile map/list tabs with a scrollable list", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(BASE, { waitUntil: "networkidle", timeout: 60_000 });
+
+  // The map is the default view and has usable height.
+  await expect(page.locator("#tab-map")).toBeVisible();
+  await expect(page.locator("#tab-list")).toBeVisible();
+  await expect(page.locator("#map")).toBeVisible();
+  await expect(page.locator("#list-panel")).toBeHidden();
+  const mapBox = await page.locator("#map").boundingBox();
+  expect(mapBox.height).toBeGreaterThan(200);
+
+  // Switch to the list: it fills the view and scrolls internally.
+  await page.locator("#tab-list").click();
+  await expect(page.locator("#list-panel")).toBeVisible();
+  await expect(page.locator("#map")).toBeHidden();
+  const scrollable = await page.locator("#list").evaluate((el) => el.scrollHeight > el.clientHeight);
+  expect(scrollable).toBeTruthy();
+
+  // Picking a station jumps back to the map.
+  await page.locator("#list li", { hasText: "KU0HN-10" }).first().click();
+  await expect(page.locator("#map")).toBeVisible();
+  await expect(page.locator("#list-panel")).toBeHidden();
+});

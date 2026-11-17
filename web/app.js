@@ -16,6 +16,10 @@ const $ = (id) => document.getElementById(id);
 // Bump the version to show the notice again after its wording changes.
 const NOTICE_KEY = "rmslist-notice-v2";
 
+// Mobile map/list switcher.
+const MOBILE_VIEW_KEY = "rmslist-mobile-view";
+const MOBILE_QUERY = window.matchMedia("(max-width: 720px)");
+
 const BAND_ORDER = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m","6m","2m","1.25m","70cm","33cm","23cm","HF","Other"];
 
 // VHF/UHF starts at 30 MHz (6 m and up). For these line-of-sight bands a 0%
@@ -331,7 +335,13 @@ function renderList(stations) {
       `</div>`;
     li.addEventListener("click", () => {
       if (!st.latitude && !st.longitude) return;
-      map.setView([st.latitude, st.longitude], Math.max(map.getZoom(), 8));
+      const show = () => map.setView([st.latitude, st.longitude], Math.max(map.getZoom(), 8));
+      if (MOBILE_QUERY.matches && document.documentElement.dataset.mobileView !== "map") {
+        setMobileView("map");
+        requestAnimationFrame(() => { map.invalidateSize(); show(); });
+      } else {
+        show();
+      }
     });
     list.appendChild(li);
   }
@@ -425,6 +435,37 @@ function initNotice() {
   });
 }
 
+/* ---------- mobile map/list tabs ---------- */
+function setMobileView(view) {
+  if (view !== "list") view = "map";
+  document.documentElement.dataset.mobileView = view;
+  for (const btn of document.querySelectorAll(".viewtab")) {
+    btn.setAttribute("aria-selected", String(btn.dataset.view === view));
+  }
+  try { localStorage.setItem(MOBILE_VIEW_KEY, view); } catch (_) {}
+  if (view === "map" && map) requestAnimationFrame(() => map.invalidateSize());
+}
+
+function initMobileTabs() {
+  let view = "map";
+  try {
+    if (localStorage.getItem(MOBILE_VIEW_KEY) === "list") view = "list";
+  } catch (_) {}
+  setMobileView(view);
+
+  const tabs = [...document.querySelectorAll(".viewtab")];
+  for (const btn of tabs) {
+    btn.addEventListener("click", () => setMobileView(btn.dataset.view));
+    btn.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const next = tabs[(tabs.indexOf(btn) + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+      next.focus();
+      setMobileView(next.dataset.view);
+    });
+  }
+}
+
 /* ---------- events ---------- */
 function wireEvents() {
   $("service-code").addEventListener("change", (e) => {
@@ -446,6 +487,7 @@ function wireEvents() {
   applyTheme(theme);
   initNotice();
   initMap();
+  initMobileTabs();
   wireEvents();
   try {
     await load();
