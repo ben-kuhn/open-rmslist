@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -475,5 +477,52 @@ func TestServeGatewayVersioned(t *testing.T) {
 	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
 		t.Errorf("Cache-Control = %q, want no-cache", got)
+	}
+}
+
+func TestServiceCodesConfig(t *testing.T) {
+	dir := t.TempDir()
+	loader := cmsapi.NewLoader(dir, []string{"PUBLIC"}, 48, "test")
+	heur := propagation.NewHeuristic(dir)
+	path := filepath.Join(dir, "service_codes.json")
+	s := New(Config{
+		Version:          "test",
+		ServiceCodes:     []string{"PUBLIC"},
+		ServiceCodesPath: path,
+		TileCacheDir:     t.TempDir(),
+	}, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}, loader, heur)
+	s.refreshCodes = func(context.Context) error { return nil }
+	h := s.Handler()
+
+	do := func(method, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, "/api/servicecodes/config", strings.NewReader(body)))
+		return rec
+	}
+
+	if rec := do(http.MethodGet, ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"PUBLIC"`) {
+		t.Fatalf("GET = %d %s", rec.Code, rec.Body.String())
+	}
+
+	if rec := do(http.MethodPost, `{"add":"modem73"}`); rec.Code != http.StatusOK {
+		t.Fatalf("POST add = %d %s", rec.Code, rec.Body.String())
+	}
+	if got := loader.ServiceCodes(); len(got) != 2 || got[0] != "MODEM73" || got[1] != "PUBLIC" {
+		t.Fatalf("codes after add = %v", got)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(b), "MODEM73") {
+		t.Fatalf("persisted codes = %s (%v)", b, err)
+	}
+
+	if rec := do(http.MethodPost, `{"remove":"modem73"}`); rec.Code != http.StatusOK {
+		t.Fatalf("POST remove = %d %s", rec.Code, rec.Body.String())
+	}
+	if got := loader.ServiceCodes(); len(got) != 1 || got[0] != "PUBLIC" {
+		t.Fatalf("codes after remove = %v", got)
+	}
+
+	if rec := do(http.MethodPost, `{"codes":[]}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty codes = %d, want 400", rec.Code)
 	}
 }

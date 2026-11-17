@@ -42,8 +42,12 @@ func (s Source) String() string {
 type Loader struct {
 	client       *Client
 	cacheDir     string
-	codes        []string
 	historyHours int
+
+	codesMu sync.RWMutex
+	codes   []string
+
+	refreshMu sync.Mutex
 
 	mu        sync.RWMutex
 	data      []byte
@@ -64,11 +68,30 @@ func NewLoader(cacheDir string, codes []string, historyHours int, key string) *L
 }
 
 func (l *Loader) cachePath() string {
+	codes := l.ServiceCodes()
 	name := "gateway_status"
-	if !(len(l.codes) == 1 && l.codes[0] == "PUBLIC") {
-		name += "-" + strings.Join(l.codes, "-")
+	if !(len(codes) == 1 && codes[0] == "PUBLIC") {
+		name += "-" + strings.Join(codes, "-")
 	}
 	return filepath.Join(l.cacheDir, name+".json")
+}
+
+// ServiceCodes returns a copy of the service codes currently requested.
+func (l *Loader) ServiceCodes() []string {
+	l.codesMu.RLock()
+	defer l.codesMu.RUnlock()
+	return append([]string(nil), l.codes...)
+}
+
+// SetServiceCodes changes the requested service codes. The next Refresh (or
+// Seed) uses the new cache key and network query.
+func (l *Loader) SetServiceCodes(codes []string) {
+	if len(codes) == 0 {
+		codes = []string{"PUBLIC"}
+	}
+	l.codesMu.Lock()
+	defer l.codesMu.Unlock()
+	l.codes = append([]string(nil), codes...)
 }
 
 // Seed loads data from the on-disk cache, or the embedded snapshot if there is
@@ -89,6 +112,11 @@ func (l *Loader) Seed() {
 // snapshot. When force is true the cache is skipped and the network is tried
 // first (falling back to the embedded snapshot only on failure).
 func (l *Loader) Refresh(ctx context.Context, force bool) error {
+	// Serialize network refreshes so a UI-triggered refresh cannot race the
+	// background ticker.
+	l.refreshMu.Lock()
+	defer l.refreshMu.Unlock()
+
 	if !force {
 		if b, err := os.ReadFile(l.cachePath()); err == nil && len(b) > 0 {
 			l.set(b, SourceCache, time.Now())
@@ -96,7 +124,7 @@ func (l *Loader) Refresh(ctx context.Context, force bool) error {
 		}
 	}
 
-	b, fetchErr := l.client.Fetch(ctx, l.codes, l.historyHours)
+	b, fetchErr := l.client.Fetch(ctx, l.ServiceCodes(), l.historyHours)
 	if fetchErr == nil {
 		if l.cacheDir != "" {
 			if err := os.MkdirAll(l.cacheDir, 0o755); err == nil {

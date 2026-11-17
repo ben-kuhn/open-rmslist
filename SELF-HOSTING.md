@@ -92,7 +92,7 @@ endpoints are token-guarded and disabled in `-d` service mode.
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
 | `-listen` | `RMSRADAR_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
-| `-service-codes` | `RMSRADAR_SERVICE_CODES` | `PUBLIC,EMCOMM,MERCURY,VARDEFM,MODEM73,DATA2G` | Comma-separated service codes to fetch (no wildcard) |
+| `-service-codes` | `RMSRADAR_SERVICE_CODES` | `PUBLIC,EMCOMM` | Comma-separated service codes to fetch (no wildcard) |
 | `-refresh` | `RMSRADAR_REFRESH` | `1h` | Gateway list refresh interval |
 | `-cache-dir` | `RMSRADAR_CACHE_DIR` | `./data` | Cache directory |
 | `-key` | `RMSRADAR_KEY` | Pat's community key | Winlink CMS access key |
@@ -123,16 +123,22 @@ and `VARDEFM` channels as **VardeFM**, even though the API advertises them as
 The API's raw mode is preserved in `raw_mode` and shown as a hover hint.
 
 The Winlink API has no wildcard for service codes, so `-service-codes` lists the
-codes to request. The default is the set of community and access codes the API currently serves:
+codes to request. The default is the two documented public codes:
 
 | Code | Notes |
 |------|-------|
 | `PUBLIC` | maritime and open amateur gateways |
 | `EMCOMM` | emergency gateways that do not allow public access |
-| `MERCURY` | Mercury HF gateways |
-| `VARDEFM` | VardeFM gateways |
-| `MODEM73` | Modem73 gateways |
-| `DATA2G` | Data2G gateways |
+| `MERCURY` | Mercury HF gateways (community) |
+| `VARDEFM` | VardeFM gateways (community) |
+| `MODEM73` | Modem73 gateways (community) |
+| `DATA2G` | Data2G gateways (community) |
+| *other* | any community or private group code |
+
+The list is **runtime-configurable** — open **Service codes…** in the app to
+add or remove a code, or set `-service-codes` / the module option. New community
+codes do not require a new release; a code with no gateways simply contributes
+nothing, and the filter dropdown is built from the data.
 
 Add any private group code you are entitled to with
 `-service-codes PUBLIC,MYGROUP` (or `RMSRADAR_SERVICE_CODES`); codes with no

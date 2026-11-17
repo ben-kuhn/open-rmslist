@@ -36,6 +36,8 @@ type Config struct {
 	TileURL          string
 	TileCacheDir     string
 	VHFMaxRangeKm    float64
+	// ServiceCodesPath persists the runtime-configurable service-code list.
+	ServiceCodesPath string
 
 	// DesktopToken enables the desktop lifecycle endpoints. It is non-empty
 	// only when the app was launched in desktop (double-click) mode.
@@ -63,6 +65,9 @@ type Server struct {
 	assetVersion string
 
 	tileClient *http.Client
+
+	// refreshCodes reloads the gateway data after the service-code list changes.
+	refreshCodes func(context.Context) error
 
 	// Desktop (double-click) lifecycle: the page checks in while it is open,
 	// and the process exits once every page has gone away.
@@ -103,6 +108,12 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 		desktopToken:   cfg.DesktopToken,
 		onQuit:         cfg.OnQuit,
 		desktopClients: make(map[string]time.Time),
+	}
+	s.refreshCodes = func(ctx context.Context) error {
+		if err := s.loader.Refresh(ctx, true); err != nil {
+			return err
+		}
+		return s.Refresh(ctx)
 	}
 	if s.desktopToken != "" {
 		go s.monitorDesktop()
@@ -145,6 +156,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/gateways", s.handleGateways)
 	mux.HandleFunc("/api/servicecodes", s.handleServiceCodes)
+	mux.HandleFunc("/api/servicecodes/config", s.handleServiceCodesConfig)
 	mux.HandleFunc("/api/conditions", s.handleConditions)
 	mux.HandleFunc("/api/rank", s.handleRank)
 	mux.HandleFunc("/api/config", s.handleConfig)
@@ -231,7 +243,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"source":        source.String(),
 		"fetched_at":    at.UTC().Format(time.RFC3339),
 		"stations":      len(stations),
-		"service_codes": s.cfg.ServiceCodes,
+		"service_codes": s.loader.ServiceCodes(),
 	})
 }
 
@@ -266,10 +278,96 @@ func (s *Server) handleConditions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.heuristic.Conditions())
 }
 
+// handleServiceCodesConfig returns or updates the persisted list of service
+// codes to fetch. The Winlink API has no wildcard, so adding a code is how a
+// group publishes a new community modem without a new release.
+func (s *Server) handleServiceCodesConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, map[string]any{"codes": s.loader.ServiceCodes()})
+	case http.MethodPost:
+		var req struct {
+			Codes  []string `json:"codes"`
+			Add    string   `json:"add"`
+			Remove string   `json:"remove"`
+		}
+		body := http.MaxBytesReader(w, r.Body, 1<<16)
+		if err := json.NewDecoder(body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		next := s.loader.ServiceCodes()
+		if req.Codes != nil {
+			next = req.Codes
+		} else {
+			next = append(next, req.Add)
+			if req.Remove != "" {
+				filtered := next[:0]
+				for _, c := range next {
+					if !strings.EqualFold(c, req.Remove) {
+						filtered = append(filtered, c)
+					}
+				}
+				next = filtered
+			}
+		}
+		next = normalizeServiceCodes(next)
+		if len(next) == 0 {
+			http.Error(w, "at least one service code is required", http.StatusBadRequest)
+			return
+		}
+		if err := s.saveServiceCodes(next); err != nil {
+			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		s.loader.SetServiceCodes(next)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		resp := map[string]any{"codes": next}
+		if s.refreshCodes != nil {
+			if err := s.refreshCodes(ctx); err != nil {
+				resp["warning"] = "saved, but refresh failed: " + err.Error()
+			}
+		}
+		writeJSON(w, resp)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func normalizeServiceCodes(codes []string) []string {
+	seen := make(map[string]bool, len(codes))
+	out := make([]string, 0, len(codes))
+	for _, c := range codes {
+		c = strings.ToUpper(strings.TrimSpace(c))
+		if c == "" || seen[c] {
+			continue
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (s *Server) saveServiceCodes(codes []string) error {
+	if s.cfg.ServiceCodesPath == "" {
+		return nil
+	}
+	b, err := json.Marshal(codes)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(s.cfg.ServiceCodesPath), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(s.cfg.ServiceCodesPath, b, 0o644)
+}
+
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"version":       s.cfg.Version,
-		"service_codes": s.cfg.ServiceCodes,
+		"service_codes": s.loader.ServiceCodes(),
 		"voacap":        s.voacapEnabled,
 		"tile_url":      proxyTilePath,
 	})

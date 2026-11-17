@@ -5,11 +5,13 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -57,14 +59,17 @@ func Start(parent context.Context, cfg Config) (*App, error) {
 	a := &App{cancel: cancel, done: make(chan struct{})}
 
 	tileCache := ""
+	serviceCodesPath := ""
 	if cfg.CacheDir != "" {
 		tileCache = filepath.Join(cfg.CacheDir, "tiles")
+		serviceCodesPath = filepath.Join(cfg.CacheDir, "service_codes.json")
 	}
-	a.loader = cmsapi.NewLoader(cfg.CacheDir, cfg.ServiceCodes, cfg.HistoryHours, cfg.AccessKey)
+	codes := serviceCodesFromDisk(serviceCodesPath, cfg.ServiceCodes)
+	a.loader = cmsapi.NewLoader(cfg.CacheDir, codes, cfg.HistoryHours, cfg.AccessKey)
 	a.heur = propagation.NewHeuristic(cfg.CacheDir)
 	a.srv = server.New(server.Config{
 		Version:          cfg.Version,
-		ServiceCodes:     cfg.ServiceCodes,
+		ServiceCodes:     codes,
 		HistoryHours:     cfg.HistoryHours,
 		VOACAPURL:        cfg.VOACAPURL,
 		VOACAPExecutable: cfg.VOACAPExecutable,
@@ -72,6 +77,7 @@ func Start(parent context.Context, cfg Config) (*App, error) {
 		TileURL:          cfg.TileURL,
 		TileCacheDir:     tileCache,
 		VHFMaxRangeKm:    cfg.VHFMaxRangeKm,
+		ServiceCodesPath: serviceCodesPath,
 		DesktopToken:     cfg.DesktopToken,
 		OnQuit:           cancel,
 	}, cfg.WebFS, a.loader, a.heur)
@@ -134,6 +140,23 @@ func Start(parent context.Context, cfg Config) (*App, error) {
 		close(a.done)
 	}()
 	return a, nil
+}
+
+// serviceCodesFromDisk uses the persisted runtime list when present, otherwise
+// the configured seed list.
+func serviceCodesFromDisk(path string, fallback []string) []string {
+	if path == "" {
+		return fallback
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return fallback
+	}
+	var codes []string
+	if json.Unmarshal(b, &codes) != nil || len(codes) == 0 {
+		return fallback
+	}
+	return codes
 }
 
 // URL returns a browser-friendly base URL for the listener. A :0 listen

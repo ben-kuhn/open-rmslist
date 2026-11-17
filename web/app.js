@@ -154,6 +154,10 @@ function populateServiceCodes() {
     opt.textContent = code + (n != null ? ` (${n})` : "");
     sel.appendChild(opt);
   }
+  if (state.filters.serviceCode && !counts.has(state.filters.serviceCode)) {
+    state.filters.serviceCode = "";
+  }
+  sel.value = state.filters.serviceCode;
 }
 
 function populateBandMode() {
@@ -536,6 +540,71 @@ function initDesktopSession() {
   }
 }
 
+/* ---------- service-code configuration ---------- */
+async function refreshCodesList() {
+  const cfg = await fetchJSON("/api/servicecodes/config");
+  const list = $("codes-list");
+  list.innerHTML = "";
+  for (const code of cfg.codes) {
+    const row = document.createElement("div");
+    row.className = "codes-row";
+    const label = document.createElement("span");
+    label.textContent = code;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn";
+    btn.textContent = "Remove";
+    btn.addEventListener("click", () => changeCodes({ remove: code }));
+    row.append(label, btn);
+    list.appendChild(row);
+  }
+}
+
+async function openCodesDialog() {
+  $("codes-status").textContent = "";
+  await refreshCodesList();
+  const dlg = $("codes-dialog");
+  if (typeof dlg.showModal === "function") dlg.showModal();
+  else dlg.setAttribute("open", "");
+  $("code-input").focus();
+}
+
+async function changeCodes(body) {
+  const status = $("codes-status");
+  status.textContent = "Updating and refreshing…";
+  try {
+    const res = await fetchJSON("/api/servicecodes/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    status.textContent = res.warning || "Updated.";
+    await load();
+    await refreshCodesList();
+  } catch (err) {
+    status.textContent = "Update failed: " + err.message;
+  }
+}
+
+function initCodesDialog() {
+  $("codes-btn").addEventListener("click", () => {
+    openCodesDialog().catch((err) => setNote("Could not open service codes: " + err.message));
+  });
+  $("code-add").addEventListener("click", () => {
+    const input = $("code-input");
+    const code = input.value.trim();
+    if (!code) return;
+    input.value = "";
+    changeCodes({ add: code });
+  });
+  $("code-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      $("code-add").click();
+    }
+  });
+}
+
 /* ---------- events ---------- */
 function wireEvents() {
   $("service-code").addEventListener("change", (e) => {
@@ -560,6 +629,7 @@ function wireEvents() {
   initMobileTabs();
   initDesktopSession();
   wireEvents();
+  initCodesDialog();
   try {
     await load();
   } catch (err) {
