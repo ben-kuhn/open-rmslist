@@ -30,10 +30,15 @@ import (
 	"github.com/jedisct1/go-minisign"
 )
 
-// MinisignPublicKey is the public half of the key used by the release workflow
-// to sign VOACAP bundles. The matching private key is stored in the repository's
-// VOACAP_MINISIGN_SECRET_KEY Actions secret.
-const MinisignPublicKey = "RWQoKUnh2RVOrHnNGpIBq61ECRNk8+eL93Sn5dhdm2te75Zz7lOkUSZt"
+// MinisignPublicKeys are the public halves of the keys accepted for VOACAP
+// bundles. The first was used for the v0.2.4 release; the second is the current
+// signing key. Keeping both lets a new app verify an older pinned bundle during
+// a development fallback. The current private key lives in the repository's
+// VOACAP_MINISIGN_SECRET_KEY Actions secret (and must be backed up offline).
+var MinisignPublicKeys = []string{
+	"RWQoKUnh2RVOrHnNGpIBq61ECRNk8+eL93Sn5dhdm2te75Zz7lOkUSZt",
+	"RWS7XOFIwTDVkQ7duMqIyyJ4Zv/ZLiMflNx+2+bvSZ767iDtEuszSJs7",
+}
 
 var releaseVersionRE = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+$`)
 
@@ -109,22 +114,29 @@ func RemoteSHA256(ctx context.Context, url string) (string, error) {
 // VerifyMinisign verifies data against a minisign signature using the embedded
 // release public key.
 func VerifyMinisign(data, signature []byte) error {
-	pk, err := minisign.NewPublicKey(MinisignPublicKey)
-	if err != nil {
-		return fmt.Errorf("minisign public key: %w", err)
-	}
 	sig, err := minisign.DecodeSignature(string(signature))
 	if err != nil {
 		return fmt.Errorf("minisign signature: %w", err)
 	}
-	ok, err := pk.Verify(data, sig)
-	if err != nil {
-		return fmt.Errorf("minisign verify: %w", err)
+	var lastErr error
+	for _, key := range MinisignPublicKeys {
+		pk, err := minisign.NewPublicKey(key)
+		if err != nil {
+			lastErr = fmt.Errorf("minisign public key: %w", err)
+			continue
+		}
+		ok, err := pk.Verify(data, sig)
+		if err == nil && ok {
+			return nil
+		}
+		if err != nil {
+			lastErr = err
+		}
 	}
-	if !ok {
-		return fmt.Errorf("minisign signature does not match the bundle")
+	if lastErr != nil {
+		return fmt.Errorf("minisign verify: %w", lastErr)
 	}
-	return nil
+	return fmt.Errorf("minisign signature does not match any trusted key")
 }
 
 const (

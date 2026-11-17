@@ -397,4 +397,14 @@ func TestVerifyMinisign(t *testing.T) {
 	if err := VerifyMinisign(payload, []byte("garbage")); err == nil {
 		t.Fatal("garbage signature accepted")
 	}
+
+	// The current signing key is also trusted.
+	payload2 := []byte("voacap test payload v2")
+	sig2 := []byte("untrusted comment: test v2\n" +
+		"RUS7XOFIwTDVkWLY0j46UYUMmlbe2eg2MRHPpMgYiVxx9mTynm+teI9bR/Ve/ljkWsgKGtY0rwMtunAI7wzyHt18TL0Jzz6Gngk=\n" +
+		"trusted comment: timestamp:1794954702\tfile:voacap-test2.txt\thashed\n" +
+		"7+xT4GUUN3yJKPd4bVuUAmpavPBrKo0PuWiK2cT548DK+PCvR3cIV16KpoSI4JBYwlW6Y3OoBnq5L++75pKQAA==\n")
+	if err := VerifyMinisign(payload2, sig2); err != nil {
+		t.Fatalf("current-key signature rejected: %v", err)
+	}
 }
