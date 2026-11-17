@@ -62,6 +62,12 @@ async function fetchJSON(url, opts) {
   return res.json();
 }
 
+async function fetchWithHeaders(url, opts) {
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error(`${url} -> ${res.status}`);
+  return { data: await res.json(), headers: res.headers };
+}
+
 function freshnessColor(hours) {
   if (hours == null || hours < 0) return "#8b949e";
   if (hours < 2) return getCSS("--green");
@@ -316,7 +322,7 @@ async function doRank() {
   };
   setNote("Ranking…");
   try {
-    const results = await fetchJSON("/api/rank", {
+    const { data: results, headers } = await fetchWithHeaders("/api/rank", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
@@ -329,6 +335,9 @@ async function doRank() {
     }
     let msg = `${results.length} candidate${results.length === 1 ? "" : "s"} ranked for ` +
       `${req.band || "all bands"} ${req.mode || "all modes"} from ${grid}.`;
+    if (headers.get("X-Rank-Truncated") === "true") msg += " (capped)";
+    const unscored = parseInt(headers.get("X-Rank-Errors") || "0", 10);
+    if (unscored > 0) msg += ` · ${unscored} unscored`;
     if (!state.config.voacap) {
       msg += " · point-to-point VOACAP forecasts off (install voacapl or set -voacap-url).";
     }

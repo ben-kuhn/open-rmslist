@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -103,6 +104,52 @@ func TestExtractZip(t *testing.T) {
 	}
 	if filepath.Base(exe) != "voacapw.exe" {
 		t.Fatalf("exe = %q", exe)
+	}
+}
+
+func TestWriteFileBudget(t *testing.T) {
+	dir := t.TempDir()
+	budget := int64(64)
+
+	err := writeFile(filepath.Join(dir, "a.bin"), strings.NewReader(strings.Repeat("a", 40)), 0o644, &budget)
+	if err != nil {
+		t.Fatalf("first write failed: %v", err)
+	}
+	if budget != 24 {
+		t.Fatalf("budget after first write = %d, want 24", budget)
+	}
+
+	// A second 40-byte entry exceeds the remaining 24-byte budget and must fail.
+	err = writeFile(filepath.Join(dir, "b.bin"), strings.NewReader(strings.Repeat("b", 40)), 0o644, &budget)
+	if err == nil {
+		t.Fatal("second write should have exceeded the budget")
+	}
+	if budget != 24 {
+		t.Errorf("budget was modified on failure: %d", budget)
+	}
+}
+
+func TestExtractURLQueryAndFragment(t *testing.T) {
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	add := func(name, body string) {
+		must(t, tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(body)), Typeflag: tar.TypeReg}))
+		_, _ = tw.Write([]byte(body))
+	}
+	must(t, tw.WriteHeader(&tar.Header{Name: "dist/itshfbc", Mode: 0o755, Typeflag: tar.TypeDir}))
+	add("dist/itshfbc/ccir.dat", "data")
+	must(t, tw.Close())
+	must(t, gz.Close())
+	archive := filepath.Join(dir, "dist.tar.gz")
+	must(t, os.WriteFile(archive, buf.Bytes(), 0o644))
+
+	for _, u := range []string{"http://x/dist.tar.gz?token=abc", "http://x/dist.tar.gz#page2"} {
+		dest := t.TempDir()
+		if err := extract(archive, u, dest); err != nil {
+			t.Errorf("extract(%q) failed: %v", u, err)
+		}
 	}
 }
 

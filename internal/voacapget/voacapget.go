@@ -38,6 +38,12 @@ var downloadClient = &http.Client{Timeout: 120 * time.Second}
 // it into destDir, and returns the voacapl/voacapw executable path and the
 // itshfbc data directory.
 func Fetch(ctx context.Context, url, destDir, wantSHA256 string) (string, string, error) {
+	// Idempotent: don't re-download an already-installed distribution.
+	if exe, data, err := Find(destDir); err == nil && exe != "" && data != "" {
+		log.Printf("voacapl: already installed at %s", destDir)
+		return exe, data, nil
+	}
+
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return "", "", err
 	}
@@ -111,7 +117,11 @@ func verifySHA256(path, want string) error {
 }
 
 func extract(path, url, destDir string) error {
-	lower := strings.ToLower(url)
+	strip := url
+	if i := strings.IndexAny(strip, "?#"); i >= 0 {
+		strip = strip[:i]
+	}
+	lower := strings.ToLower(strip)
 	switch {
 	case strings.HasSuffix(lower, ".zip"):
 		return extractZip(path, destDir)

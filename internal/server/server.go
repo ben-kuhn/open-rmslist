@@ -194,6 +194,13 @@ type rankedEntry struct {
 	Note        string  `json:"note,omitempty"`
 }
 
+// Per-request rank deadlines. main.go sets WriteTimeout to
+// RankTimeoutVOACAP + a margin, so the HTTP write always outlives the rank.
+const (
+	RankTimeoutHeuristic = 120 * time.Second
+	RankTimeoutVOACAP    = 5 * time.Minute
+)
+
 // maxRankCandidates bounds a single rank request; a whole-feed rank (all
 // bands/modes) is a self-DoS, especially when each candidate runs VOACAP.
 const maxRankCandidates = 500
@@ -252,9 +259,9 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 		log.Printf("rank: truncated to %d candidates; narrow band/mode for complete results", maxRankCandidates)
 	}
 
-	timeout := 120 * time.Second
+	timeout := RankTimeoutHeuristic
 	if s.voacapEnabled {
-		timeout = 5 * time.Minute
+		timeout = RankTimeoutVOACAP
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()

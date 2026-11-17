@@ -123,8 +123,10 @@ func main() {
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      5 * time.Minute, // accommodates a full VOACAP rank
-		IdleTimeout:       120 * time.Second,
+		// Strictly greater than any rank deadline, so a long rank's response
+		// is never aborted mid-write.
+		WriteTimeout: server.RankTimeoutVOACAP + 2*time.Minute,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	if *openBrowser {
