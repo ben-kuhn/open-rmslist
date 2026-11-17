@@ -10,8 +10,10 @@ stations by predicted link success using current propagation conditions.
 
 - **Dark mode (default) and light mode**
 - **Mobile-friendly** — on narrow screens, Map/List tabs keep the map visible and the gateway list scrolls in its own pane
-- **Double-click desktop mode** — opens your browser and exits when the last tab
-  closes; use `-d` for a headless service
+- **Native desktop app** — `openrmslist-desktop` opens a real window
+  (WKWebView / WebView2 / WebKitGTK); closing the window quits. The
+  `openrmslist-web` binary is the headless server, with a browser fallback and
+  `-d` for services
 - **Service-code dropdown** populated from the fetched gateway list
 - **Service-code aware** — gateways are shown and filtered by the Winlink
   service code the API returns (`PUBLIC`, `EMCOMM`, `MERCURY`, `VARDEFM`, …);
@@ -47,21 +49,45 @@ This endpoint returns per-gateway latitude/longitude and per-channel
 
 ## Quick start
 
-Requires Go 1.23+ (no third-party Go dependencies; the web UI is embedded).
+The default build is the CGO-free **web/server** binary:
 
 ```bash
-go build -o open-rmslist .
-./open-rmslist                 # desktop mode: opens the map; closing the tab quits
+go build -o openrmslist-web .
+./openrmslist-web              # browser mode: opens the map; closing the tab quits
 ```
 
-The default is **desktop mode** on every platform: the app starts a local server,
-opens your default browser, and exits when the last browser tab for it closes.
-For a headless service that stays running:
+The default is **browser desktop mode** on every platform: the app starts a local
+server, opens your default browser, and exits when the last browser tab for it
+closes. For a headless service that stays running:
 
 ```bash
-./open-rmslist -d              # service mode: no browser, no auto-exit
-./open-rmslist -d -listen 0.0.0.0:8079
+./openrmslist-web -d           # service mode: no browser, no auto-exit
+./openrmslist-web -d -listen 0.0.0.0:8079
 ```
+
+### Native desktop window
+
+`openrmslist-desktop` embeds the same UI in a native window instead of a browser.
+It requires CGo and the platform webview runtime:
+
+- **Linux:** `libwebkit2gtk-4.1-dev` and `libgtk-3-dev` (the build script adds a
+  `webkit2gtk-4.0` compatibility shim automatically)
+- **macOS:** Xcode command-line tools (WKWebView is built in)
+- **Windows:** MinGW-w64 and the WebView2 runtime
+
+```bash
+./scripts/build-desktop.sh     # native artifact in dist-desktop/
+```
+
+or build it directly:
+
+```bash
+CGO_ENABLED=1 go build -tags desktop -o openrmslist-desktop .
+```
+
+Closing the window quits the process; there is no browser tab or heartbeat
+heuristic involved. The desktop binary accepts the same data/propagation flags,
+plus `-debug` for webview developer tools.
 
 ### Configuration
 
@@ -83,7 +109,11 @@ For a headless service that stays running:
 | `-tile-url` | `OPENRMSLIST_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Upstream tile template; proxied and disk-cached by the server |
 | `-vhf-max-range` | `OPENRMSLIST_VHF_MAX_RANGE` | `400` | Max plausible VHF/UHF path (km) for ranking — distance-based, not continent-based; set large to disable |
 | `-d`, `-daemon` | `OPENRMSLIST_DAEMON` | `false` | Service mode: do not open a browser and never auto-exit |
-| `-open-browser` | `OPENRMSLIST_OPEN_BROWSER` | `true` | Open the web UI in the default browser on start (desktop mode) |
+| `-open-browser` | `OPENRMSLIST_OPEN_BROWSER` | `true` | Open the web UI in the default browser on start (browser desktop mode) |
+
+The native `openrmslist-desktop` binary accepts the same data/propagation flags
+plus `-debug` for webview developer tools; it has no `-d`/`-open-browser` because
+closing its window always quits.
 
 ### Desktop mode vs service mode
 
@@ -234,50 +264,48 @@ Packaging included:
   [`nix-ham-packages`](https://github.com/ben-kuhn/nix-ham-packages) overlay
   (`pkgs.open-rmslist` + `services.open-rmslist` module, `-d` by default)
 
-### Double-click packaging
+### Release artifacts
 
-Release artifacts include:
+Two packages are published:
 
-- **macOS** — `open-rmslist.app.zip`. The bundle is unsigned; on first launch
-  use right-click → **Open**, or run
-  `xattr -dr com.apple.quarantine open-rmslist.app`.
-- **Windows** — the main `.exe` is a GUI build (no console window); a
-  `-console.exe` is included for service/troubleshooting use.
-- **Linux** — an `open-rmslist.desktop` launcher is included in the tarball and
-  installed by the Arch/RPM/Nix packages (`Exec=open-rmslist`).
+- **Web/server** — `openrmslist-web-<version>-<os>-<arch>` (CGO-free; the
+  Arch/RPM/Nix service packages install it as `open-rms-list`).
+- **Desktop** — `openrmslist-desktop-<version>-<os>-<arch>` with a native window:
+  - **macOS** — `openrmslist-desktop.app.zip`. The bundle is unsigned; on first
+    launch use right-click → **Open**, or run
+    `xattr -dr com.apple.quarantine openrmslist-desktop.app`.
+  - **Windows** — a `.zip` with a GUI-subsystem `.exe` (no console window).
+  - **Linux** — a `.tar.gz` with an `openrmslist-desktop.desktop` launcher. The
+    system needs WebKitGTK 4.1 installed (`libwebkit2gtk-4.1-0`).
 
 ### Desktop GUI options
 
-The default desktop mode deliberately uses the user's browser, which keeps the
-project a single dependency-free binary. If you want a real native window
-instead, the main routes are:
+The desktop build uses a native webview (the same C/C++ webview library as
+[`webview/webview`](https://github.com/webview/webview)): WKWebView on macOS,
+WebView2 on Windows, WebKitGTK 4.1 on Linux. Closing the window is a real quit;
+no browser, tab, or heartbeat heuristic is involved. The trade-off is CGo plus
+per-OS SDK/runtime dependencies for that build only — the web/server binary
+remains CGO-free and dependency-free at runtime.
 
-1. **Native webview (best native feel).** A separate build or build tag using
-   [`webview/webview`](https://github.com/webview/webview) or Wails. macOS uses
-   WKWebView, Windows WebView2, and Linux WebKitGTK. Closing the window is a real
-   quit — no heartbeat heuristic. Costs: CGo, per-OS SDK/runtime dependencies,
-   larger artifacts, and code signing/notarization for clean distribution. Keep
-   the headless binary for servers.
-2. **System tray wrapper.** Add `fyne.io/systray` or `getlantern/systray` with
-   Open/Quit menu items; the UI remains in the browser. Works well on
-   Linux/Windows, but closing the browser is not the same as quitting, so a tray
-   Quit is still needed.
-3. **App-mode browser window.** Launch Chromium-based browsers with
-   `--app=http://127.0.0.1:8079` for a chromeless window, keeping the current
-   beacon-based exit. Small change, but browser-dependent.
-4. **Current: browser + heartbeat.** No new dependencies, works on every
-   platform, at the cost of a small auto-exit grace and a Quit button.
+Alternatives if the native build is not a fit:
 
-The current mode is the lowest-friction default; the webview route is the one to
-take if a true `.app`/`.exe` window and a definitive "close = quit" are required.
+1. **Browser mode** — `openrmslist-web` opens the default browser and exits when
+   the last tab closes (plus a Quit button). Zero build dependencies.
+2. **System tray wrapper** — `fyne.io/systray` / `getlantern/systray` with
+   Open/Quit items; the UI stays in the browser. Good for Linux/Windows, but
+   closing the browser is not the same as quitting.
+3. **App-mode browser window** — launch Chromium-based browsers with
+   `--app=http://127.0.0.1:8079` for a chromeless window, keeping the beacon
+   exit. Small change, browser-dependent.
 
 ### CI/CD
 
-- `.github/workflows/ci.yml` — vet, test, and cross-compile every target on
-  push/PR.
-- `.github/workflows/release.yml` — on a `v*` tag, build and package all
-  targets (`tar.gz`/`zip` + SHA-256 checksums) and publish a GitHub Release via
-  `scripts/build-release.sh`.
+- `.github/workflows/ci.yml` — vet, test, cross-compile the web targets, and
+  build the native desktop binary on Linux/macOS/Windows runners on push/PR.
+- `.github/workflows/release.yml` — on a `v*` tag, build and package the web
+  artifacts (`scripts/build-release.sh`) and the native desktop artifacts
+  (`scripts/build-desktop.sh`) on native runners, then publish a GitHub Release
+  with combined SHA-256 checksums.
 
 ## Offline behavior
 

@@ -1,36 +1,24 @@
+//go:build !desktop
+
 package main
 
 import (
 	"context"
-	"crypto/rand"
-	"embed"
-	"encoding/hex"
 	"flag"
-	"fmt"
-	"io/fs"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
+	"github.com/ben-kuhn/open-rmslist/internal/app"
 	"github.com/ben-kuhn/open-rmslist/internal/browser"
 	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
-	"github.com/ben-kuhn/open-rmslist/internal/propagation"
-	"github.com/ben-kuhn/open-rmslist/internal/server"
 	"github.com/ben-kuhn/open-rmslist/internal/voacapget"
 )
 
-// version is overridable at link time via -ldflags "-X main.version=...".
-var version = "0.1.2"
-
-//go:embed all:web
-var webFS embed.FS
-
+// Web/service binary. The native-window build lives in desktop.go behind the
+// "desktop" build tag, so the default build stays CGO-free.
 func main() {
 	var (
 		addr         = flag.String("listen", envOr("OPENRMSLIST_LISTEN", "127.0.0.1:8079"), "HTTP listen address (use 0.0.0.0:8079 to serve the LAN)")
@@ -78,7 +66,7 @@ func main() {
 	if isDaemon {
 		mode = "daemon"
 	}
-	log.Printf("open-rmslist %s | %s mode | service codes: %v", version, mode, codes)
+	log.Printf("open-rmslist-web %s | %s mode | service codes: %v", version, mode, codes)
 
 	webFSys, err := webFilesystem(*webDir)
 	if err != nil {
@@ -93,66 +81,28 @@ func main() {
 		desktopToken = randomHex(16)
 	}
 
-	loader := cmsapi.NewLoader(*cacheDir, codes, *historyHours, *accessKey)
-	heur := propagation.NewHeuristic(*cacheDir)
-	srv := server.New(server.Config{
+	a, err := app.Start(ctx, app.Config{
 		Version:          version,
+		Listen:           *addr,
 		ServiceCodes:     codes,
 		HistoryHours:     *historyHours,
+		CacheDir:         *cacheDir,
+		AccessKey:        *accessKey,
+		Refresh:          *refresh,
 		VOACAPURL:        *voacapURL,
 		VOACAPExecutable: *voacapExec,
 		VOACAPDataDir:    *voacapData,
 		TileURL:          *tileURL,
-		TileCacheDir:     filepath.Join(*cacheDir, "tiles"),
 		VHFMaxRangeKm:    *vhfRange,
+		WebFS:            webFSys,
 		DesktopToken:     desktopToken,
-		OnQuit:           stop,
-	}, webFSys, loader, heur)
-
-	// Seed immediately from cache or the embedded snapshot (never blocks on the
-	// network), then refresh from the network in the background.
-	loader.Seed()
-	if err := srv.Refresh(ctx); err != nil {
-		log.Printf("warning: parse gateways: %v", err)
-	}
-
-	// Background: fetch fresh propagation conditions, then refresh the gateway
-	// list (immediately once, then on the configured interval).
-	go func() {
-		heur.RefreshConditions(ctx)
-		if err := loader.Refresh(ctx, true); err == nil {
-			_ = srv.Refresh(ctx)
-		}
-		ticker := time.NewTicker(*refresh)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				heur.RefreshConditions(ctx)
-				if err := loader.Refresh(ctx, true); err != nil {
-					log.Printf("refresh: %v", err)
-				} else if err := srv.Refresh(ctx); err != nil {
-					log.Printf("parse: %v", err)
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	httpSrv := &http.Server{
-		Addr:              *addr,
-		Handler:           srv.Handler(),
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		// Strictly greater than any rank deadline, so a long rank's response
-		// is never aborted mid-write.
-		WriteTimeout: server.RankTimeoutVOACAP + 2*time.Minute,
-		IdleTimeout:  120 * time.Second,
+	})
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	if *openBrowser {
-		pageURL := browserURL(*addr)
+		pageURL := a.URL()
 		if desktopToken != "" {
 			pageURL += "/?desktop=" + desktopToken
 		}
@@ -164,112 +114,11 @@ func main() {
 		}()
 	}
 
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = httpSrv.Shutdown(shutdownCtx)
-	}()
-
-	log.Printf("listening on %s", *addr)
-	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
-	}
-}
-
-func webFilesystem(dir string) (fs.FS, error) {
-	if dir != "" {
-		return os.DirFS(dir), nil
-	}
-	return fs.Sub(webFS, "web")
-}
-
-func browserURL(addr string) string {
-	host := addr
-	if host == "" {
-		host = ":8079"
-	}
-	switch {
-	case strings.HasPrefix(host, ":"):
-		return "http://localhost" + host
-	case strings.HasPrefix(host, "0.0.0.0"):
-		return "http://localhost" + strings.TrimPrefix(host, "0.0.0.0")
-	case strings.HasPrefix(host, "::"):
-		return "http://localhost" + strings.TrimPrefix(host, "::")
-	default:
-		return "http://" + host
-	}
+	log.Printf("listening on %s", a.URL())
+	a.Wait()
 }
 
 func defaultOpenBrowser() bool {
-	// Desktop (double-click) mode is the default everywhere; -d serves headless.
+	// Desktop (double-click/browser) mode is the default; -d serves headless.
 	return true
-}
-
-func randomHex(n int) string {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return fmt.Sprintf("%d", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(b)
-}
-
-func defaultVOACAPDownloadDir() string {
-	if dir, err := os.UserCacheDir(); err == nil {
-		return filepath.Join(dir, "open-rmslist", "voacap")
-	}
-	return filepath.Join(".", "data", "voacap")
-}
-
-func splitCSV(s string) []string {
-	var out []string
-	for _, p := range strings.Split(s, ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-func envOr(key, def string) string {
-	if v, ok := os.LookupEnv(key); ok && v != "" {
-		return v
-	}
-	return def
-}
-
-func envInt(key string, def int) int {
-	if v, ok := os.LookupEnv(key); ok {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return def
-}
-
-func envFloat(key string, def float64) float64 {
-	if v, ok := os.LookupEnv(key); ok {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			return f
-		}
-	}
-	return def
-}
-
-func envBool(key string, def bool) bool {
-	if v, ok := os.LookupEnv(key); ok {
-		if b, err := strconv.ParseBool(v); err == nil {
-			return b
-		}
-	}
-	return def
-}
-
-func envDuration(key string, def time.Duration) time.Duration {
-	if v, ok := os.LookupEnv(key); ok {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
-	}
-	return def
 }

@@ -63,9 +63,43 @@ jobs:
         run: |
           mkdir -p dist
           go build -trimpath -ldflags "-s -w" \
-            -o "dist/open-rmslist-${{ matrix.goos }}-${{ matrix.goarch }}" .
+            -o "dist/openrmslist-web-${{ matrix.goos }}-${{ matrix.goarch }}" .
       - name: upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: open-rmslist-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/open-rmslist-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: openrmslist-web-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/openrmslist-web-${{ matrix.goos }}-${{ matrix.goarch }}
+
+  desktop:
+    name: Desktop build (${{ matrix.os }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: install Linux webview dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev pkg-config
+      - name: install MinGW for Windows CGo
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command gcc -ErrorAction SilentlyContinue)) {
+            choco install mingw -y --no-progress
+            "C:\ProgramData\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+      - name: build native desktop binary
+        shell: bash
+        run: ./scripts/build-desktop.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: dist-desktop/*
