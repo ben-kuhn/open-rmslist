@@ -82,7 +82,7 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 // bypasses CDN edge caches (which ignore a browser hard-refresh).
 func assetVersion(web fs.FS) string {
 	h := sha256.New()
-	for _, name := range []string{"app.js", "style.css"} {
+	for _, name := range []string{"app.js", "style.css", "vendor/leaflet/leaflet.js", "vendor/leaflet/leaflet.css"} {
 		if b, err := fs.ReadFile(web, name); err == nil {
 			_, _ = h.Write(b)
 		}
@@ -122,6 +122,14 @@ func (s *Server) Handler() http.Handler {
 		case "/", "/index.html":
 			s.serveIndex(w, r)
 		default:
+			// Content-hashed (?v=) assets are safe to cache forever, so the CDN
+			// and browsers rarely hit the origin. Unversioned files get a short
+			// TTL so a stale copy can't linger.
+			if r.URL.Query().Get("v") != "" {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "public, max-age=300")
+			}
 			fileServer.ServeHTTP(w, r)
 		}
 	})
@@ -138,8 +146,11 @@ func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	html := string(b)
 	if s.assetVersion != "" {
-		html = strings.ReplaceAll(html, `href="style.css"`, `href="style.css?v=`+s.assetVersion+`"`)
-		html = strings.ReplaceAll(html, `src="app.js"`, `src="app.js?v=`+s.assetVersion+`"`)
+		v := s.assetVersion
+		html = strings.ReplaceAll(html, `href="style.css"`, `href="style.css?v=`+v+`"`)
+		html = strings.ReplaceAll(html, `src="app.js"`, `src="app.js?v=`+v+`"`)
+		html = strings.ReplaceAll(html, `href="vendor/leaflet/leaflet.css"`, `href="vendor/leaflet/leaflet.css?v=`+v+`"`)
+		html = strings.ReplaceAll(html, `src="vendor/leaflet/leaflet.js"`, `src="vendor/leaflet/leaflet.js?v=`+v+`"`)
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
