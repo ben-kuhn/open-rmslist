@@ -8,13 +8,25 @@ import (
 	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
 )
 
-// Channel is a normalized, display-ready channel. Mode is exactly what the
-// Winlink API reports; the service code is the authoritative label for
-// Mercury/VardeFM and other community groups.
+// CommunityModems maps Winlink service codes that name a community modem to the
+// label shown in the mode column. The API advertises these channels under the
+// modem's underlying protocol (for example VARA), so the service code is the
+// reliable identity. Matching the advertised mode string would be fragile.
+// Codes not listed here (PUBLIC, EMCOMM, private groups) keep the reported mode.
+var CommunityModems = map[string]string{
+	"MERCURY": "Mercury",
+	"VARDEFM": "VardeFM",
+}
+
+// Channel is a normalized, display-ready channel. Mode is the label to show;
+// for a community-modem service code that is the service's name (Mercury,
+// VardeFM), otherwise it is exactly what the Winlink API reports. RawMode keeps
+// the API value either way.
 type Channel struct {
 	ServiceCode    string  `json:"service_code"`
-	Mode           string  `json:"mode"`        // as reported by Winlink
-	ModeFamily     string  `json:"mode_family"` // VARA, VARA FM, ARDOP, Packet, ...
+	Mode           string  `json:"mode"`        // display label
+	RawMode        string  `json:"raw_mode"`    // as reported by Winlink
+	ModeFamily     string  `json:"mode_family"` // VARA, VARA FM, Mercury, ...
 	FrequencyHz    float64 `json:"frequency_hz"`
 	Frequency      string  `json:"frequency"` // human readable
 	Gridsquare     string  `json:"gridsquare"`
@@ -67,13 +79,19 @@ func Normalize(status *cmsapi.GatewayStatus) []Station {
 }
 
 func normalizeChannel(ch cmsapi.GatewayChannel) Channel {
-	mode := strings.TrimSpace(ch.SupportedModes)
-	if mode == "" {
-		mode = "Unknown"
+	raw := strings.TrimSpace(ch.SupportedModes)
+	if raw == "" {
+		raw = "Unknown"
+	}
+	sc := strings.ToUpper(strings.TrimSpace(ch.ServiceCode))
+	mode := raw
+	if label, ok := CommunityModems[sc]; ok {
+		mode = label
 	}
 	return Channel{
-		ServiceCode:    strings.ToUpper(strings.TrimSpace(ch.ServiceCode)),
+		ServiceCode:    sc,
 		Mode:           mode,
+		RawMode:        raw,
 		ModeFamily:     modeFamily(mode),
 		FrequencyHz:    ch.Frequency,
 		Frequency:      formatFrequency(ch.Frequency),
@@ -93,6 +111,10 @@ func modeFamily(mode string) string {
 		return "VARA FM"
 	case strings.HasPrefix(m, "VARA"):
 		return "VARA"
+	case strings.HasPrefix(m, "MERCURY"):
+		return "Mercury"
+	case strings.HasPrefix(m, "VARDEFM"):
+		return "VardeFM"
 	case strings.HasPrefix(m, "ARDOP"):
 		return "ARDOP"
 	case strings.HasPrefix(m, "PACKET"):

@@ -9,6 +9,7 @@ import (
 func TestModeFamily(t *testing.T) {
 	cases := map[string]string{
 		"VARA": "VARA", "VARA FM": "VARA FM", "VARA FM WIDE": "VARA FM",
+		"Mercury": "Mercury", "VardeFM": "VardeFM",
 		"ARDOP 2000":  "ARDOP",
 		"Packet 1200": "Packet", "Pactor 3": "PACTOR", "Robust Packet": "Robust Packet",
 		"WINMOR 1600": "WINMOR", "Unknown": "Other",
@@ -76,10 +77,32 @@ func TestNormalize(t *testing.T) {
 	if ch.ServiceCode != "MERCURY" {
 		t.Errorf("ServiceCode = %q, want MERCURY (uppercased)", ch.ServiceCode)
 	}
-	if ch.Mode != "VARA" {
-		t.Errorf("Mode = %q, want VARA (as reported)", ch.Mode)
+	if ch.Mode != "Mercury" {
+		t.Errorf("Mode = %q, want Mercury (service-code label)", ch.Mode)
+	}
+	if ch.RawMode != "VARA" {
+		t.Errorf("RawMode = %q, want VARA (as reported)", ch.RawMode)
 	}
 	if ch.Band != "40m" {
 		t.Errorf("Band = %q, want 40m", ch.Band)
+	}
+}
+
+func TestCommunityModemLabels(t *testing.T) {
+	// Community modem codes are labelled with the service name.
+	for sc, want := range map[string]string{"MERCURY": "Mercury", "VARDEFM": "VardeFM"} {
+		ch := normalizeChannel(cmsapi.GatewayChannel{SupportedModes: "VARA", ServiceCode: sc})
+		if ch.Mode != want {
+			t.Errorf("mode for %s = %q, want %q", sc, ch.Mode, want)
+		}
+		if ch.RawMode != "VARA" {
+			t.Errorf("raw_mode for %s = %q, want VARA", sc, ch.RawMode)
+		}
+	}
+
+	// Access codes keep the mode the API reports.
+	emcomm := normalizeChannel(cmsapi.GatewayChannel{SupportedModes: "ARDOP 2000", ServiceCode: "EMCOMM"})
+	if emcomm.Mode != "ARDOP 2000" || emcomm.RawMode != "ARDOP 2000" {
+		t.Errorf("EMCOMM mode = %q / raw %q, want ARDOP 2000", emcomm.Mode, emcomm.RawMode)
 	}
 }

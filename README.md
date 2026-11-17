@@ -12,7 +12,8 @@ stations by predicted link success using current propagation conditions.
 - **Service-code dropdown** populated from the fetched gateway list
 - **Service-code aware** — gateways are shown and filtered by the Winlink
   service code the API returns (`PUBLIC`, `EMCOMM`, `MERCURY`, `VARDEFM`, …);
-  modes are shown exactly as the API reports them
+  community-modem channels are labelled with the service name (Mercury,
+  VardeFM), while other codes show the reported mode
 - **Client setup guide** — a static page explains how to add service codes in
   Winlink Express, PAT, WoAD, RadioMail, and HTCommander
 - **Propagation ranking** — pick your grid, band, and mode; stations are
@@ -28,9 +29,10 @@ stations by predicted link success using current propagation conditions.
 The Winlink gateway list advertises community modems by their *VARA-compatible*
 API: a Mercury HF modem is listed as `VARA`, a VardeFM modem as `VARA FM`, and
 the real identity is carried in the service code (`MERCURY`, `VARDEFM`, …).
-Rather than guessing mode names, `open-rmslist` uses the service codes the API
-returns and shows the advertised modes as-is, so every grouping stays visible
-and filterable.
+Rather than matching mode strings, `open-rmslist` uses the service code: a
+channel whose service code names a community modem is shown under that name
+(Mercury, VardeFM), while everything else keeps the advertised mode. The raw
+API mode stays available as a hover hint and in the `raw_mode` field.
 
 ## Data source
 
@@ -76,9 +78,11 @@ open <http://localhost:8079> yourself (or pass `-open-browser`).
 ### Service codes
 
 The service-code dropdown is built from the codes present in the fetched data,
-and the mode dropdown shows the modes those channels advertise. There is no mode
-rewriting: a `MERCURY` channel is labelled by its service code, and its mode is
-shown exactly as the API reports it (`VARA`, `VARA 500`, …).
+and the mode dropdown shows the modes those channels advertise. Community-modem
+codes are labelled with the service name: `MERCURY` channels show as **Mercury**
+and `VARDEFM` channels as **VardeFM**, even though the API advertises them as
+`VARA`. Other codes (`PUBLIC`, `EMCOMM`, private groups) keep the reported mode.
+The API's raw mode is preserved in `raw_mode` and shown as a hover hint.
 
 The Winlink API has no wildcard for service codes, so `-service-codes` lists the
 codes to request. The default is the set the API currently serves:

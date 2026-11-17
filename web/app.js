@@ -24,7 +24,7 @@ const BAND_ORDER = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m"
 const VHF_MIN_HZ = 30e6;
 const VHF_BANDS = new Set(["6m", "2m", "1.25m", "70cm", "33cm", "23cm"]);
 const isHfChannel = (c) => !(c.frequency_hz >= VHF_MIN_HZ || VHF_BANDS.has(c.band));
-const MODE_ORDER = ["VARA","VARA FM","ARDOP","Packet","PACTOR","Robust Packet","WINMOR","Other"];
+const MODE_ORDER = ["VARA","VARA FM","Mercury","VardeFM","ARDOP","Packet","PACTOR","Robust Packet","WINMOR","Other"];
 
 /* ---------- theme ---------- */
 function applyTheme(theme) {
@@ -96,6 +96,12 @@ function isRankedChannel(c, r) {
   return c.frequency_hz === r.frequency_hz &&
     c.mode === r.mode &&
     (c.service_code || "PUBLIC") === (r.service_code || "PUBLIC");
+}
+
+// Community-modem labels (Mercury, VardeFM) replace the API's VARA text; keep
+// the reported mode available as a hover hint.
+function modeTitle(c) {
+  return c.raw_mode && c.raw_mode !== c.mode ? ` title="Winlink reports ${esc(c.raw_mode)}"` : "";
 }
 
 /* ---------- data ---------- */
@@ -243,7 +249,7 @@ function renderMarkers(stations) {
 
 function popupHTML(st, rank) {
   const channels = st.channels.map((c) =>
-    `<div class="ch-row${rank && isRankedChannel(c, rank) ? " ch-best" : ""}"><span class="ch-mode">${esc(c.mode)}</span>` +
+    `<div class="ch-row${rank && isRankedChannel(c, rank) ? " ch-best" : ""}"><span class="ch-mode"${modeTitle(c)}>${esc(c.mode)}</span>` +
     `<span class="ch-freq">${esc(c.frequency || fmtHz(c.frequency_hz))}</span>` +
     `<span class="ch-sc">${esc(c.service_code || "PUBLIC")}</span></div>`).join("");
   const rankLine = rank
@@ -320,7 +326,7 @@ function renderList(stations) {
         (r ? ` · ${r.distance_km.toFixed(0)} km` : "") +
         (r && r.note ? ` · ${esc(r.note)}` : "") + `</div>` +
       `<div class="station-channels">${chans.slice(0, 4).map((c) =>
-        `<div class="ch-row${r && isRankedChannel(c, r) ? " ch-best" : ""}"><span class="ch-mode">${esc(c.mode)}</span><span class="ch-freq">${esc(c.frequency || fmtHz(c.frequency_hz))}</span><span class="ch-sc">${esc(c.service_code || "PUBLIC")}</span></div>`).join("")}` +
+        `<div class="ch-row${r && isRankedChannel(c, r) ? " ch-best" : ""}"><span class="ch-mode"${modeTitle(c)}>${esc(c.mode)}</span><span class="ch-freq">${esc(c.frequency || fmtHz(c.frequency_hz))}</span><span class="ch-sc">${esc(c.service_code || "PUBLIC")}</span></div>`).join("")}` +
         (chans.length > 4 ? `<div class="station-meta">+${chans.length - 4} more</div>` : "") +
       `</div>`;
     li.addEventListener("click", () => {
