@@ -17,7 +17,7 @@ jobs:
         run: |
           dnf -y install golang rpm-build systemd-rpm-macros
           cd "$GITHUB_WORKSPACE"
-          VERSION="$(sed -n 's/^var version = "\([^"]*\)"/\1/p' main.go)"
+          VERSION="$(sed -n 's/^var version = "\([^"]*\)"/\1/p' shared.go)"
           [ -n "$VERSION" ] || { echo "could not determine version" >&2; exit 1; }
           PREFIX="rms-radar-${VERSION}"
           mkdir -p "$HOME/rpmbuild/SOURCES"
@@ -38,7 +38,7 @@ jobs:
           pacman -Sy --noconfirm --needed base-devel go
           useradd -m builder
           cd "$GITHUB_WORKSPACE"
-          VERSION="$(sed -n 's/^var version = "\([^"]*\)"/\1/p' main.go)"
+          VERSION="$(sed -n 's/^var version = "\([^"]*\)"/\1/p' shared.go)"
           [ -n "$VERSION" ] || { echo "could not determine version" >&2; exit 1; }
           PREFIX="rms-radar-${VERSION}"
           # PKGBUILD source points at the GitHub tag; drop a local tarball with
