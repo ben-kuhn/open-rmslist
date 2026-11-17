@@ -30,6 +30,7 @@ func newTestServer(t *testing.T, stations []catalog.Station) *Server {
 	}, fstest.MapFS{
 		"index.html":   &fstest.MapFile{Data: []byte(`<link rel="stylesheet" href="style.css"><script src="theme.js"></script><script src="app.js"></script>`)},
 		"clients.html": &fstest.MapFile{Data: []byte(`<link rel="stylesheet" href="style.css"><script src="theme.js"></script>`)},
+		"gateway.html": &fstest.MapFile{Data: []byte(`<link rel="stylesheet" href="style.css"><script src="theme.js"></script>`)},
 		"app.js":       &fstest.MapFile{Data: []byte("//app")},
 		"theme.js":     &fstest.MapFile{Data: []byte("//theme")},
 		"style.css":    &fstest.MapFile{Data: []byte("/*css*/")},
@@ -461,5 +462,18 @@ func TestDesktopEndpointsDisabledWithoutToken(t *testing.T) {
 	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/desktop/hello?token=x&id=a", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status %d, want 404 when desktop mode is off", rec.Code)
+	}
+}
+
+func TestServeGatewayVersioned(t *testing.T) {
+	s := newTestServer(t, fixture())
+	rec := httptest.NewRecorder()
+	s.serveHTML(rec, httptest.NewRequest(http.MethodGet, "/gateway.html", nil), "gateway.html")
+	body := rec.Body.String()
+	if !strings.Contains(body, "style.css?v=") || !strings.Contains(body, "theme.js?v=") {
+		t.Errorf("gateway page not cache-busted: %s", body)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Errorf("Cache-Control = %q, want no-cache", got)
 	}
 }

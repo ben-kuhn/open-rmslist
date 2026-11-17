@@ -81,3 +81,11 @@ test("mobile map/list tabs with a scrollable list", async ({ page }) => {
   await expect(page.locator("#list-panel")).toBeHidden();
   await expect(page.locator(".leaflet-popup-content")).toContainText("KU0HN-10");
 });
+
+test("gateway setup guide is served", async ({ page }) => {
+  const res = await page.goto(BASE + "/gateway.html", { waitUntil: "domcontentloaded" });
+  expect(res.ok()).toBeTruthy();
+  await expect(page.locator("h1")).toContainText("Setting up a Winlink gateway");
+  await expect(page.locator("h2", { hasText: "RMS Trimode" })).toHaveCount(1);
+  await expect(page.locator("h2", { hasText: "BPQ32" })).toHaveCount(1);
+});

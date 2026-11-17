@@ -19,8 +19,8 @@ stations by predicted link success using current propagation conditions.
   service code the API returns (`PUBLIC`, `EMCOMM`, `MERCURY`, `VARDEFM`, …);
   community-modem channels are labelled with the service name (Mercury,
   VardeFM), while other codes show the reported mode
-- **Client setup guide** — a static page explains how to add service codes in
-  Winlink Express, PAT, WoAD, RadioMail, and HTCommander
+- **Setup guides** — static pages explain how to add service codes in Winlink
+  clients and how to publish them from RMS Trimode and BPQ32/LinBPQ gateways
 - **Propagation ranking** — pick your grid, band, and mode; stations are
   scored and highlighted by predicted link quality. While ranking, 0% VHF/UHF
   paths are hidden as implausible. HF stations are kept regardless of score.
@@ -155,7 +155,9 @@ gateways simply contribute nothing.
 
 A per-client setup guide is served at `/clients.html` (source:
 `web/clients.html`), covering Winlink Express, PAT, WoAD, RadioMail, and
-HTCommander.
+HTCommander. A gateway guide at `/gateway.html` (source: `web/gateway.html`)
+covers RMS Trimode and BPQ32/LinBPQ, including the one-frequency/mode report
+caveat.
 
 ## Propagation
 

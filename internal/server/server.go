@@ -161,6 +161,8 @@ func (s *Server) Handler() http.Handler {
 			s.serveHTML(w, r, "index.html")
 		case "/clients.html":
 			s.serveHTML(w, r, "clients.html")
+		case "/gateway.html":
+			s.serveHTML(w, r, "gateway.html")
 		default:
 			// Content-hashed (?v=) assets can be cached for a few days: a new
 			// build changes the hash, so the HTML always points at fresh URLs.

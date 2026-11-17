@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Gateway setup — Winlink Gateway Map</title>
+<script src="theme.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="doc-body">
+<main class="doc">
+  <p class="doc-back"><a href="./">← Back to the map</a></p>
+
+  <h1>Setting up a Winlink gateway</h1>
+  <p class="doc-sub">
+    Make your gateway's modes and service codes visible to clients — and to this
+    map. This page covers RMS Trimode and BPQ32/LinBPQ.
+  </p>
+
+  <div class="doc-note">
+    <p>
+      <strong>One frequency/mode pair per report.</strong> The Winlink channel
+      database keys an advertised channel by its frequency and mode string. If you
+      run several modes or service codes on one dial frequency, give each report a
+      <strong>distinct mode label</strong> — <code>VARA500</code>, <code>VARA</code>,
+      <code>VARA2750</code>, <code>ARDOP2000</code>, etc. Otherwise one report can
+      replace another and some of the service codes will never show up.
+    </p>
+  </div>
+
+  <h2>Before you start</h2>
+  <ul>
+    <li>Your base callsign must be authorized by a Winlink administrator as a gateway.</li>
+    <li>Only publish a service you actually run 24/7, and only the modes you listen on.</li>
+    <li><code>PUBLIC</code> is the open amateur code; <code>EMCOMM</code> is for emergency gateways that do not allow public access; <code>MERCURY</code> and <code>VARDEFM</code> identify community modems. Other codes are private group codes.</li>
+  </ul>
+
+  <h2>RMS Trimode <span class="doc-os">HF · Windows</span></h2>
+  <ol>
+    <li>Open <strong>Settings → Registration</strong> and enter the gateway callsign and Winlink password.</li>
+    <li>Open <strong>Settings → Site Setup</strong>; set the grid square and the default <strong>Service Code</strong> (normally <code>PUBLIC</code>).</li>
+    <li>Open <strong>Settings → Channel Settings</strong>; add each frequency/mode pair with its operating hours and service code, then click <strong>Update</strong>.</li>
+    <li>To publish more than one mode or service code on the same frequency, add one entry per mode and give each a distinct mode label (<code>VARA500</code>, <code>VARA2750</code>, <code>ARDOP</code>, …). Trimode still accepts one connection at a time.</li>
+    <li>Restart Trimode and confirm the channels appear in the Winlink list and on this map.</li>
+  </ol>
+  <p class="doc-more">
+    More information:
+    <a href="https://winlink.org/content/rms_trimode" target="_blank" rel="noopener noreferrer">Winlink — RMS Trimode</a>
+    · <a href="https://rmham.org/wp-content/uploads/2022/03/RMS-Trimode.pdf" target="_blank" rel="noopener noreferrer">RMHAM Trimode setup deck (PDF)</a>.
+  </p>
+
+  <h2>BPQ32 / LinBPQ <span class="doc-os">HF · VHF/UHF · Windows · Linux</span></h2>
+  <p>
+    BPQ publishes channels with <code>WL2KREPORT</code> lines in each radio port
+    (before <code>ENDPORT</code>). The first field is the <strong>service code</strong>:
+  </p>
+  <pre><code>WL2KREPORT Service, Host, Port, Callsign, Locator, Hours, Freq, Mode, Power, Ant Height, Ant Gain, Ant Direction</code></pre>
+  <p>
+    Add one line per service code, frequency, and mode. This example publishes
+    three service codes on the same 40 m frequency, each with a distinct mode
+    label so the reports do not collide:
+  </p>
+  <pre><code>WL2KREPORT PUBLIC,   api.winlink.org, 80, CALL-10, EM38xx, 00-23, 7102800, VARA500, 50
+WL2KREPORT MERCURY,  api.winlink.org, 80, CALL-10, EM38xx, 00-23, 7102800, VARA,    50
+WL2KREPORT VARDEFM,  api.winlink.org, 80, CALL-10, EM38xx, 00-23, 7102800, VARA2750,50</code></pre>
+  <p>Common report labels (use the ones your gateway actually runs):</p>
+  <table class="doc-table">
+    <thead><tr><th>Mode</th><th>Report label</th></tr></thead>
+    <tbody>
+      <tr><td>VARA HF (500 / 2300 / 2750 Hz)</td><td><code>VARA</code>, <code>VARA500</code>, <code>VARA2750</code></td></tr>
+      <tr><td>VARA FM</td><td><code>VARAFM</code>, <code>VARAFM12</code>, <code>VARAFM96</code></td></tr>
+      <tr><td>ARDOP</td><td><code>ARDOP200</code>, <code>ARDOP500</code>, <code>ARDOP1000</code>, <code>ARDOP2000</code></td></tr>
+      <tr><td>Packet</td><td><code>PKT1200</code>, <code>PKT9600</code></td></tr>
+      <tr><td>Pactor</td><td><code>P1</code>, <code>P12</code>, <code>P123</code>, <code>P1234</code>, …</td></tr>
+      <tr><td>Robust Packet</td><td><code>ROBUST</code></td></tr>
+    </tbody>
+  </table>
+  <p class="doc-more">
+    More information:
+    <a href="https://www.cantab.net/users/john.wiseman/Documents/WL2KReporting.html" target="_blank" rel="noopener noreferrer">BPQ — Reporting to the Winlink database</a>
+    · <a href="https://www.cantab.net/users/john.wiseman/Documents/LinBPQ_RMSGateway.html" target="_blank" rel="noopener noreferrer">Setting up a LinBPQ RMS gateway</a>.
+  </p>
+
+  <h2>Verify the listing</h2>
+  <p>
+    After saving and restarting, check the official list at
+    <a href="https://winlink.org/RMSChannels" target="_blank" rel="noopener noreferrer">winlink.org/RMSChannels</a>
+    and the service-code dropdown here. The CMS can take a few minutes to update;
+    this map refreshes hourly.
+  </p>
+
+  <h2>A note on labels</h2>
+  <p>
+    The label is reporting metadata — it does not change the modem's bandwidth or
+    give the gateway another radio. Use the label clients should select (for
+    example <code>VARA500</code> for a 500 Hz VARA channel), and keep each
+    frequency/mode label unique so every service code survives the database.
+  </p>
+
+  <p class="doc-foot"><a href="./">← Back to the map</a> · <a href="clients.html">Client setup guide</a></p>
+</main>
+</body>
+</html>
