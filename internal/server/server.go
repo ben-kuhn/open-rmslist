@@ -122,11 +122,11 @@ func (s *Server) Handler() http.Handler {
 		case "/", "/index.html":
 			s.serveIndex(w, r)
 		default:
-			// Content-hashed (?v=) assets are safe to cache forever, so the CDN
-			// and browsers rarely hit the origin. Unversioned files get a short
-			// TTL so a stale copy can't linger.
+			// Content-hashed (?v=) assets can be cached for a few days: a new
+			// build changes the hash, so the HTML always points at fresh URLs.
+			// Unversioned files get a short TTL so a stale copy can't linger.
 			if r.URL.Query().Get("v") != "" {
-				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				w.Header().Set("Cache-Control", "public, max-age=259200") // 3 days
 			} else {
 				w.Header().Set("Cache-Control", "public, max-age=300")
 			}
