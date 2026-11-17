@@ -35,6 +35,7 @@ type Config struct {
 	VOACAPDataDir    string
 	TileURL          string
 	TileCacheDir     string
+	VHFMaxRangeKm    float64
 }
 
 // Server serves the web UI and JSON API.
@@ -419,9 +420,10 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 			if mode != "" && !strings.EqualFold(ch.ModeFamily, mode) {
 				continue
 			}
-			// VHF/UHF is line-of-sight: drop gateways beyond a plausible range
-			// so 2m/70cm lists never include stations on another continent.
-			if ch.FrequencyHz >= 30e6 && d > vhfMaxRangeKm(parseRangeKm(ch.RadioRange)) {
+			// VHF/UHF is line-of-sight. This is a distance-based sanity bound
+			// (not continent-based), so nearby cross-border stations still
+			// appear while implausibly distant paths are dropped.
+			if ch.FrequencyHz >= 30e6 && d > s.vhfMaxRangeKm(parseRangeKm(ch.RadioRange)) {
 				continue
 			}
 			cands = append(cands, cand{st: st, ch: ch, dist: d})
@@ -536,16 +538,16 @@ func parseRangeKm(s string) float64 {
 	return f * 1.60934
 }
 
-// vhfMaxRangeKm returns the plausible maximum distance for a VHF/UHF
-// (line-of-sight) path. A generous floor covers enhanced/tropo paths; the
-// ceiling keeps it from pulling in other continents.
-func vhfMaxRangeKm(advertisedKm float64) float64 {
-	const floor, ceiling = 300.0, 1000.0
-	limit := math.Max(floor, advertisedKm*1.5)
-	if limit > ceiling {
-		limit = ceiling
+// vhfMaxRangeKm returns the maximum plausible distance for a VHF/UHF
+// (line-of-sight) path. This is purely distance-based (not continent-based), so
+// e.g. a station at Gibraltar still sees nearby Europe and Africa. The floor is
+// configurable (-vhf-max-range); set it large to effectively disable the filter.
+func (s *Server) vhfMaxRangeKm(advertisedKm float64) float64 {
+	floor := s.cfg.VHFMaxRangeKm
+	if floor <= 0 {
+		floor = 400 // default
 	}
-	return limit
+	return math.Max(floor, advertisedKm*1.5)
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
