@@ -141,7 +141,8 @@ jobs:
       - name: combine checksums
         run: |
           find artifacts -name checksums.txt -delete
-          find artifacts -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          (cd artifacts && find . -type f -print0 | sort -z | xargs -0 sha256sum \
+            | sed -E 's#  \./[^/]+/#  #; s#  \./#  #') > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
