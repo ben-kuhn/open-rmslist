@@ -1,6 +1,6 @@
 const { test, expect } = require("@playwright/test");
 
-const BASE = process.env.BASE_URL || "https://openrmslist.ku0hn.radio";
+const BASE = process.env.BASE_URL || "https://rmsradar.ku0hn.radio";
 
 test("deployed UI loads with map tiles and data", async ({ page }) => {
   const consoleErrors = [];

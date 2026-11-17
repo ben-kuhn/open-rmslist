@@ -7,7 +7,7 @@ on:
     inputs:
       base_url:
         description: Base URL to test
-        default: https://openrmslist.ku0hn.radio
+        default: https://rmsradar.ku0hn.radio
 
 jobs:
   smoke:
@@ -26,5 +26,5 @@ jobs:
       - name: run smoke test
         working-directory: tests/e2e
         env:
-          BASE_URL: ${{ github.event.inputs.base_url || 'https://openrmslist.ku0hn.radio' }}
+          BASE_URL: ${{ github.event.inputs.base_url || 'https://rmsradar.ku0hn.radio' }}
         run: npx playwright test
