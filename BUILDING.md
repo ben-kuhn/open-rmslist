@@ -71,6 +71,9 @@ BASE_URL=http://localhost:8079 npx playwright test
   distribution and is mirrored at the v0.2.4 release; CI/release pin and verify
   that mirror's digest, then sign every bundle with minisign. Desktop builds
   download and verify these bundles on first launch.
+- `scripts/build-voacap-windows.sh` — maintainer tool to rebuild the Windows
+  bundle from the pinned upstream archive (SHA-256
+  `29d3902c...`); update the mirror digest in the workflows if it changes.
 - `scripts/build-deb.sh <binary> <package> <version> <arch> <web|desktop>` —
   builds a `.deb` from a prebuilt binary.
 - `packaging/arch/PKGBUILD` — Arch package (web/server).
