@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"net"
@@ -22,19 +23,20 @@ import (
 
 // Config is the shared startup configuration.
 type Config struct {
-	Version          string
-	Listen           string
-	ServiceCodes     []string
-	HistoryHours     int
-	CacheDir         string
-	AccessKey        string
-	Refresh          time.Duration
-	VOACAPURL        string
-	VOACAPExecutable string
-	VOACAPDataDir    string
-	TileURL          string
-	VHFMaxRangeKm    float64
-	WebFS            fs.FS
+	Version           string
+	Listen            string
+	ServiceCodes      []string
+	HistoryHours      int
+	CacheDir          string
+	AccessKey         string
+	Refresh           time.Duration
+	VOACAPURL         string
+	VOACAPExecutable  string
+	VOACAPDataDir     string
+	TileURL           string
+	TileCacheMaxBytes int64
+	VHFMaxRangeKm     float64
+	WebFS             fs.FS
 
 	// DesktopToken enables the browser desktop lifecycle (web binary only). The
 	// native-window binary leaves it empty and quits when its window closes.
@@ -55,6 +57,9 @@ type App struct {
 // Start builds the catalog, seeds it from cache/embedded data, starts the
 // refresh loop and the HTTP listener, and returns once the listener is up.
 func Start(parent context.Context, cfg Config) (*App, error) {
+	if cfg.Refresh <= 0 {
+		return nil, fmt.Errorf("refresh interval must be positive (got %s)", cfg.Refresh)
+	}
 	ctx, cancel := context.WithCancel(parent)
 	a := &App{cancel: cancel, done: make(chan struct{})}
 
@@ -68,18 +73,19 @@ func Start(parent context.Context, cfg Config) (*App, error) {
 	a.loader = cmsapi.NewLoader(cfg.CacheDir, codes, cfg.HistoryHours, cfg.AccessKey)
 	a.heur = propagation.NewHeuristic(cfg.CacheDir)
 	a.srv = server.New(server.Config{
-		Version:          cfg.Version,
-		ServiceCodes:     codes,
-		HistoryHours:     cfg.HistoryHours,
-		VOACAPURL:        cfg.VOACAPURL,
-		VOACAPExecutable: cfg.VOACAPExecutable,
-		VOACAPDataDir:    cfg.VOACAPDataDir,
-		TileURL:          cfg.TileURL,
-		TileCacheDir:     tileCache,
-		VHFMaxRangeKm:    cfg.VHFMaxRangeKm,
-		ServiceCodesPath: serviceCodesPath,
-		DesktopToken:     cfg.DesktopToken,
-		OnQuit:           cancel,
+		Version:           cfg.Version,
+		ServiceCodes:      codes,
+		HistoryHours:      cfg.HistoryHours,
+		VOACAPURL:         cfg.VOACAPURL,
+		VOACAPExecutable:  cfg.VOACAPExecutable,
+		VOACAPDataDir:     cfg.VOACAPDataDir,
+		TileURL:           cfg.TileURL,
+		TileCacheDir:      tileCache,
+		TileCacheMaxBytes: cfg.TileCacheMaxBytes,
+		VHFMaxRangeKm:     cfg.VHFMaxRangeKm,
+		ServiceCodesPath:  serviceCodesPath,
+		DesktopToken:      cfg.DesktopToken,
+		OnQuit:            cancel,
 	}, cfg.WebFS, a.loader, a.heur)
 
 	// Seed immediately from cache or the embedded snapshot (never blocks on the

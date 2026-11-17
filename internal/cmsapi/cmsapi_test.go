@@ -31,10 +31,12 @@ func TestSeedEmbedded(t *testing.T) {
 	}
 }
 
+var validFeed = []byte(`{"Gateways":[{"Callsign":"N0CALL","GatewayChannels":[]}]}`)
+
 func TestSeedCache(t *testing.T) {
 	dir := t.TempDir()
 	l := NewLoader(dir, []string{"PUBLIC"}, 48, "")
-	if err := os.WriteFile(l.cachePath(), []byte(`{"Gateways":[]}`), 0o644); err != nil {
+	if err := os.WriteFile(l.cachePath(), validFeed, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	l.Seed()
@@ -55,7 +57,7 @@ func TestFetchFormEncoding(t *testing.T) {
 		}
 		got = r.PostForm
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"Gateways":[]}`))
+		_, _ = w.Write(validFeed)
 	}))
 	defer srv.Close()
 
@@ -101,7 +103,7 @@ func TestSourceString(t *testing.T) {
 func TestRefreshCache(t *testing.T) {
 	dir := t.TempDir()
 	l := NewLoader(dir, []string{"PUBLIC"}, 48, "k")
-	if err := os.WriteFile(l.cachePath(), []byte(`{"Gateways":[]}`), 0o644); err != nil {
+	if err := os.WriteFile(l.cachePath(), validFeed, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := l.Refresh(context.Background(), false); err != nil {
@@ -156,5 +158,60 @@ func TestRefreshEmbedded(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Error("expected embedded data")
+	}
+}
+
+func TestValidateGatewayStatus(t *testing.T) {
+	if err := ValidateGatewayStatus(validFeed); err != nil {
+		t.Fatalf("valid feed rejected: %v", err)
+	}
+	for name, body := range map[string]string{
+		"empty":   `{"Gateways":[]}`,
+		"error":   `{"ResponseStatus":{"ErrorCode":"InvalidAccessKey","Message":"nope"}}`,
+		"code":    `{"ErrorCode":42,"Gateways":[{"Callsign":"N0CALL"}]}`,
+		"no call": `{"Gateways":[{"GatewayChannels":[]}]}`,
+		"bad":     `not json`,
+	} {
+		if err := ValidateGatewayStatus([]byte(body)); err == nil {
+			t.Errorf("%s: expected rejection", name)
+		}
+	}
+}
+
+func TestRefreshKeepsLastGood(t *testing.T) {
+	dir := t.TempDir()
+	l := NewLoader(dir, []string{"PUBLIC"}, 48, "k")
+	if err := os.WriteFile(l.cachePath(), validFeed, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l.Seed()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	l.client.baseURL = srv.URL
+
+	if err := l.Refresh(context.Background(), true); err == nil {
+		t.Fatal("expected refresh error")
+	}
+	data, src, _ := l.Snapshot()
+	if src != SourceCache || string(data) != string(validFeed) {
+		t.Errorf("last-known-good not kept: src=%v len=%d", src, len(data))
+	}
+	if l.LastError() == "" {
+		t.Error("LastError is empty")
+	}
+}
+
+func TestSeedRejectsInvalidCache(t *testing.T) {
+	dir := t.TempDir()
+	l := NewLoader(dir, []string{"PUBLIC"}, 48, "")
+	if err := os.WriteFile(l.cachePath(), []byte(`{"Gateways":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l.Seed()
+	_, src, _ := l.Snapshot()
+	if src != SourceEmbedded {
+		t.Errorf("source = %v, want embedded after invalid cache", src)
 	}
 }

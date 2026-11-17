@@ -83,5 +83,16 @@ func (c *Client) Fetch(ctx context.Context, serviceCodes []string, historyHours 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("gateway status: unexpected HTTP status %s", resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	const maxGatewayStatusBytes = 32 << 20
+	b, err := io.ReadAll(io.LimitReader(resp.Body, maxGatewayStatusBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > maxGatewayStatusBytes {
+		return nil, fmt.Errorf("gateway status: response exceeds %d MiB", maxGatewayStatusBytes>>20)
+	}
+	if err := ValidateGatewayStatus(b); err != nil {
+		return nil, err
+	}
+	return b, nil
 }

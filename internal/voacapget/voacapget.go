@@ -35,20 +35,30 @@ const (
 var downloadClient = &http.Client{Timeout: 120 * time.Second}
 
 // Fetch downloads the archive at url, optionally verifies its SHA-256, extracts
-// it into destDir, and returns the voacapl/voacapw executable path and the
-// itshfbc data directory.
+// it into a staging directory, and atomically replaces destDir. An existing
+// installation is reused only when no checksum was requested or its recorded
+// checksum matches; a failed download/extract leaves the previous install
+// intact.
 func Fetch(ctx context.Context, url, destDir, wantSHA256 string) (string, string, error) {
-	// Idempotent: don't re-download an already-installed distribution.
+	if destDir == "" || destDir == "." || destDir == string(filepath.Separator) {
+		return "", "", fmt.Errorf("refusing to install into %q", destDir)
+	}
+	wantSHA256 = strings.ToLower(strings.TrimSpace(wantSHA256))
+
 	if exe, data, err := Find(destDir); err == nil && exe != "" && data != "" {
-		log.Printf("voacapl: already installed at %s", destDir)
-		return exe, data, nil
+		if wantSHA256 == "" || markerMatches(destDir, wantSHA256) {
+			log.Printf("voacapl: already installed at %s", destDir)
+			return exe, data, nil
+		}
+		log.Printf("voacapl: existing install does not match the requested checksum; reinstalling")
 	}
 
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	parent := filepath.Dir(destDir)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return "", "", err
 	}
 
-	tmp, err := download(ctx, url, destDir)
+	tmp, err := download(ctx, url, parent)
 	if err != nil {
 		return "", "", err
 	}
@@ -59,10 +69,48 @@ func Fetch(ctx context.Context, url, destDir, wantSHA256 string) (string, string
 			return "", "", err
 		}
 	}
-	if err := extract(tmp, url, destDir); err != nil {
+
+	staging, err := os.MkdirTemp(parent, ".voacap-staging-")
+	if err != nil {
 		return "", "", err
 	}
+	defer os.RemoveAll(staging)
+	if err := extract(tmp, url, staging); err != nil {
+		return "", "", err
+	}
+	if exe, data, err := Find(staging); err != nil || exe == "" || data == "" {
+		if err == nil {
+			err = fmt.Errorf("missing voacapl/voacapw or itshfbc")
+		}
+		return "", "", fmt.Errorf("archive does not contain a complete installation: %w", err)
+	}
+
+	// Publish atomically, keeping the old install as a rollback on failure.
+	backup := destDir + ".old"
+	_ = os.RemoveAll(backup)
+	if _, err := os.Stat(destDir); err == nil {
+		if err := os.Rename(destDir, backup); err != nil {
+			return "", "", err
+		}
+	}
+	if err := os.Rename(staging, destDir); err != nil {
+		_ = os.Rename(backup, destDir)
+		return "", "", err
+	}
+	_ = os.RemoveAll(backup)
+
+	if wantSHA256 != "" {
+		_ = os.WriteFile(filepath.Join(destDir, ".voacap-sha256"), []byte(wantSHA256), 0o644)
+	}
 	return Find(destDir)
+}
+
+func markerMatches(destDir, want string) bool {
+	b, err := os.ReadFile(filepath.Join(destDir, ".voacap-sha256"))
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(string(b)), strings.TrimSpace(want))
 }
 
 func download(ctx context.Context, url, destDir string) (string, error) {

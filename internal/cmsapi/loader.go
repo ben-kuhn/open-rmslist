@@ -53,6 +53,7 @@ type Loader struct {
 	data      []byte
 	source    Source
 	fetchedAt time.Time
+	lastErr   string
 }
 
 func NewLoader(cacheDir string, codes []string, historyHours int, key string) *Loader {
@@ -99,11 +100,15 @@ func (l *Loader) SetServiceCodes(codes []string) {
 // before serving. The caller can then kick off a forced network refresh in the
 // background.
 func (l *Loader) Seed() {
-	if b, err := os.ReadFile(l.cachePath()); err == nil && len(b) > 0 {
-		l.set(b, SourceCache, time.Now())
+	if b, err := os.ReadFile(l.cachePath()); err == nil && len(b) > 0 && ValidateGatewayStatus(b) == nil {
+		at := time.Now()
+		if st, err := os.Stat(l.cachePath()); err == nil {
+			at = st.ModTime()
+		}
+		l.set(b, SourceCache, at)
 		return
 	}
-	if b, err := l.embedded(); err == nil {
+	if b, err := l.embedded(); err == nil && ValidateGatewayStatus(b) == nil {
 		l.set(b, SourceEmbedded, time.Now())
 	}
 }
@@ -118,8 +123,12 @@ func (l *Loader) Refresh(ctx context.Context, force bool) error {
 	defer l.refreshMu.Unlock()
 
 	if !force {
-		if b, err := os.ReadFile(l.cachePath()); err == nil && len(b) > 0 {
-			l.set(b, SourceCache, time.Now())
+		if b, err := os.ReadFile(l.cachePath()); err == nil && len(b) > 0 && ValidateGatewayStatus(b) == nil {
+			at := time.Now()
+			if st, err := os.Stat(l.cachePath()); err == nil {
+				at = st.ModTime()
+			}
+			l.set(b, SourceCache, at)
 			return nil
 		}
 	}
@@ -135,7 +144,21 @@ func (l *Loader) Refresh(ctx context.Context, force bool) error {
 		return nil
 	}
 
-	if b, err := l.embedded(); err == nil {
+	// Keep the last-known-good snapshot; a failed refresh must not replace it
+	// with a stale embedded copy.
+	if cur, _, _ := l.Snapshot(); len(cur) > 0 {
+		l.setError(fmt.Errorf("gateway fetch failed; keeping current data: %w", fetchErr))
+		return fmt.Errorf("gateway fetch failed: %w", fetchErr)
+	}
+	if b, err := os.ReadFile(l.cachePath()); err == nil && len(b) > 0 && ValidateGatewayStatus(b) == nil {
+		at := time.Now()
+		if st, err := os.Stat(l.cachePath()); err == nil {
+			at = st.ModTime()
+		}
+		l.set(b, SourceCache, at)
+		return nil
+	}
+	if b, err := l.embedded(); err == nil && ValidateGatewayStatus(b) == nil {
 		l.set(b, SourceEmbedded, time.Now())
 		return nil
 	}
@@ -160,6 +183,25 @@ func (l *Loader) set(b []byte, src Source, at time.Time) {
 	l.data = b
 	l.source = src
 	l.fetchedAt = at
+	l.lastErr = ""
+}
+
+func (l *Loader) setError(err error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if err == nil {
+		l.lastErr = ""
+	} else {
+		l.lastErr = err.Error()
+	}
+}
+
+// LastError reports why the most recent refresh failed, if it did. The last
+// successful snapshot is kept.
+func (l *Loader) LastError() string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.lastErr
 }
 
 // Snapshot returns the current data, its source, and when it was loaded.

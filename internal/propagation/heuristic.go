@@ -17,6 +17,10 @@ import (
 	"time"
 )
 
+// maxSoundingAge bounds how old a cached condition/sounding may be before it is
+// treated as stale.
+const maxSoundingAge = 6 * time.Hour
+
 // Conditions holds cached solar-terrestrial data used by the heuristic.
 type Conditions struct {
 	Updated  time.Time `json:"updated"`
@@ -151,8 +155,12 @@ func (h *Heuristic) pathMUF(from, to Point) (float64, bool) {
 	mid := Point{Lat: (from.Lat + to.Lat) / 2, Lon: midpointLon(from.Lon, to.Lon)}
 	dist := DistanceKm(from, to)
 
+	now := time.Now()
 	var sumF, sumM, wSum float64
 	for _, s := range iono {
+		if !s.Time.IsZero() && now.Sub(s.Time) > maxSoundingAge {
+			continue
+		}
 		d := DistanceKm(mid, Point{Lat: s.Lat, Lon: s.Lon})
 		w := 1.0 / (1.0 + d/800.0)
 		sumF += s.Fof2 * w
@@ -331,9 +339,16 @@ func (h *Heuristic) fetchSolar(ctx context.Context) (Conditions, error) {
 		return Conditions{}, err
 	}
 	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return Conditions{}, fmt.Errorf("solar: HTTP %s", resp.Status)
+	}
+	const maxSolarBytes = 2 << 20
+	b, err := io.ReadAll(io.LimitReader(resp.Body, maxSolarBytes+1))
 	if err != nil {
 		return Conditions{}, err
+	}
+	if len(b) > maxSolarBytes {
+		return Conditions{}, fmt.Errorf("solar: response exceeds %d MiB", maxSolarBytes>>20)
 	}
 	var s hamqslSolar
 	if err := xml.Unmarshal(b, &s); err != nil {
@@ -357,8 +372,19 @@ func (h *Heuristic) fetchIonosondes(ctx context.Context) ([]Ionosonde, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ionosondes: HTTP %s", resp.Status)
+	}
+	const maxIonoBytes = 8 << 20
+	b, err := io.ReadAll(io.LimitReader(resp.Body, maxIonoBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > maxIonoBytes {
+		return nil, fmt.Errorf("ionosondes: response exceeds %d MiB", maxIonoBytes>>20)
+	}
 	var raw []kc2gStation
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := json.Unmarshal(b, &raw); err != nil {
 		return nil, err
 	}
 	now := time.Now()
@@ -446,6 +472,9 @@ func (h *Heuristic) loadCached() (Conditions, []Ionosonde, error) {
 	var cf conditionsFile
 	if err := json.Unmarshal(b, &cf); err != nil {
 		return Conditions{}, nil, err
+	}
+	if cf.Conditions.Updated.IsZero() || time.Since(cf.Conditions.Updated) > maxSoundingAge {
+		cf.Conditions.Stale = true
 	}
 	return cf.Conditions, cf.Ionosondes, nil
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/ben-kuhn/rms-radar/internal/app"
 	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
+	"github.com/ben-kuhn/rms-radar/internal/propagation"
 	"github.com/ben-kuhn/rms-radar/internal/voacapget"
 	webview "github.com/webview/webview_go"
 )
@@ -38,6 +39,7 @@ func main() {
 		voacapDlSum  = flag.String("voacap-download-sha256", envOr("RMSRADAR_VOACAP_DOWNLOAD_SHA256", ""), "optional SHA-256 of the VOACAP distribution archive")
 		webDir       = flag.String("web-dir", envOr("RMSRADAR_WEB_DIR", ""), "serve web assets from this directory instead of the embedded copy")
 		tileURL      = flag.String("tile-url", envOr("RMSRADAR_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"), "upstream tile URL template proxied+cached by the server (OSM by default)")
+		tileCacheMax = flag.Int("tile-cache-max", envInt("RMSRADAR_TILE_CACHE_MAX_MB", 512), "tile cache quota in MiB (set a very large value to disable eviction)")
 		vhfRange     = flag.Float64("vhf-max-range", envFloat("RMSRADAR_VHF_MAX_RANGE", 400), "max plausible VHF/UHF (>=30 MHz) path length in km for ranking (distance-based; set large to effectively disable)")
 		debug        = flag.Bool("debug", envBool("RMSRADAR_DEBUG", false), "enable the webview developer tools")
 	)
@@ -66,6 +68,16 @@ func main() {
 		}
 	}
 
+	if *voacapExec == "" {
+		if exe, data := propagation.Detect(); exe != "" {
+			*voacapExec = exe
+			if *voacapData == "" {
+				*voacapData = data
+			}
+			log.Printf("voacapl: detected %s (data %s)", exe, data)
+		}
+	}
+
 	codes := splitCSV(*serviceCodes)
 	log.Printf("RMS Radar desktop %s | service codes: %v", version, codes)
 
@@ -78,19 +90,20 @@ func main() {
 	defer stop()
 
 	a, err := app.Start(ctx, app.Config{
-		Version:          version,
-		Listen:           *addr,
-		ServiceCodes:     codes,
-		HistoryHours:     *historyHours,
-		CacheDir:         *cacheDir,
-		AccessKey:        *accessKey,
-		Refresh:          *refresh,
-		VOACAPURL:        *voacapURL,
-		VOACAPExecutable: *voacapExec,
-		VOACAPDataDir:    *voacapData,
-		TileURL:          *tileURL,
-		VHFMaxRangeKm:    *vhfRange,
-		WebFS:            webFSys,
+		Version:           version,
+		Listen:            *addr,
+		ServiceCodes:      codes,
+		HistoryHours:      *historyHours,
+		CacheDir:          *cacheDir,
+		AccessKey:         *accessKey,
+		Refresh:           *refresh,
+		VOACAPURL:         *voacapURL,
+		VOACAPExecutable:  *voacapExec,
+		VOACAPDataDir:     *voacapData,
+		TileURL:           *tileURL,
+		TileCacheMaxBytes: int64(*tileCacheMax) << 20,
+		VHFMaxRangeKm:     *vhfRange,
+		WebFS:             webFSys,
 	})
 	if err != nil {
 		log.Fatalf("start: %v", err)

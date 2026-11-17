@@ -105,6 +105,7 @@ endpoints are token-guarded and disabled in `-d` service mode.
 | `-voacap-download-sha256` | `RMSRADAR_VOACAP_DOWNLOAD_SHA256` | *(empty)* | Optional SHA-256 of the distribution archive |
 | `-web-dir` | `RMSRADAR_WEB_DIR` | *(embedded)* | Serve web assets from a directory instead |
 | `-tile-url` | `RMSRADAR_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Upstream tile template; proxied and disk-cached by the server |
+| `-tile-cache-max` | `RMSRADAR_TILE_CACHE_MAX_MB` | `512` | Tile cache quota in MiB; oldest tiles are evicted when exceeded |
 | `-vhf-max-range` | `RMSRADAR_VHF_MAX_RANGE` | `400` | Max plausible VHF/UHF path (km) for ranking — distance-based, not continent-based; set large to disable |
 | `-d`, `-daemon` | `RMSRADAR_DAEMON` | `false` | Service mode: do not open a browser and never auto-exit |
 | `-open-browser` | `RMSRADAR_OPEN_BROWSER` | `true` | Open the web UI in the default browser on start (browser desktop mode) |
@@ -190,8 +191,11 @@ core VOACAP prediction code is U.S. Government public domain (NTIA/ITS), the
 freely redistributable (Debian ships it as `voacapl-data`). Because it is exec'd
 rather than linked, there is no combined-work license question.
 
-Install it with your package manager, then either let RMS Radar find it on
-`PATH` or point at it explicitly:
+RMS Radar (server and desktop) auto-detects `voacapl` on `PATH` and the
+standard data directories (`/usr/share/voacapl/itshfbc`,
+`/usr/local/share/voacapl/itshfbc`, the Homebrew prefixes, `~/itshfbc`, and
+`C:\itshfbc` on Windows). Install it with your package manager, or point at a
+custom engine explicitly:
 
 - **Debian/Ubuntu:** `sudo apt install voacapl voacapl-data`
 - **Arch:** install `voacapl` from the AUR

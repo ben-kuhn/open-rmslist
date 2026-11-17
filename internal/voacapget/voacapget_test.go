@@ -263,3 +263,65 @@ func TestFindNoEngine(t *testing.T) {
 		t.Error("expected error when no engine is present")
 	}
 }
+
+func TestFetchReusesVerifiedInstall(t *testing.T) {
+	archive := buildTarGz(t, map[string]string{
+		"dist/voacapl":              "engine",
+		"dist/itshfbc/coeffs/c.dat": "data",
+	})
+	sum := sha256.Sum256(archive)
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_, _ = w.Write(archive)
+	}))
+	defer srv.Close()
+
+	dest := t.TempDir()
+	sha := hex.EncodeToString(sum[:])
+	if _, _, err := Fetch(context.Background(), srv.URL+"/dist.tar.gz", dest, sha); err != nil {
+		t.Fatal(err)
+	}
+	// Same checksum: reuse without downloading again.
+	if _, _, err := Fetch(context.Background(), srv.URL+"/dist.tar.gz", dest, sha); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 1 {
+		t.Fatalf("requests = %d, want 1", requests)
+	}
+	// A different checksum forces a reinstall attempt; a bad download must not
+	// destroy the verified install.
+	if _, _, err := Fetch(context.Background(), srv.URL+"/dist.tar.gz", dest, strings.Repeat("0", 64)); err == nil {
+		t.Fatal("expected checksum failure")
+	}
+	if exe, data, err := Find(dest); err != nil || exe == "" || data == "" {
+		t.Fatalf("previous install was lost: %v", err)
+	}
+}
+
+func TestFetchIncompleteArchiveKeepsOld(t *testing.T) {
+	good := buildTarGz(t, map[string]string{
+		"dist/voacapl":              "engine",
+		"dist/itshfbc/coeffs/c.dat": "data",
+	})
+	bad := buildTarGz(t, map[string]string{"dist/voacapl": "engine"})
+	badSum := sha256.Sum256(bad)
+	goodSum := sha256.Sum256(good)
+	served := good
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(served)
+	}))
+	defer srv.Close()
+
+	dest := t.TempDir()
+	if _, _, err := Fetch(context.Background(), srv.URL+"/v.tar.gz", dest, hex.EncodeToString(goodSum[:])); err != nil {
+		t.Fatal(err)
+	}
+	served = bad
+	if _, _, err := Fetch(context.Background(), srv.URL+"/v.tar.gz", dest, hex.EncodeToString(badSum[:])); err == nil {
+		t.Fatal("expected incomplete-archive failure")
+	}
+	if exe, data, err := Find(dest); err != nil || exe == "" || data == "" {
+		t.Fatalf("previous install was lost: %v", err)
+	}
+}

@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -178,9 +179,13 @@ func generateInputFile(params Params) ([]byte, error) {
 }
 
 func toPrediction(r io.Reader, params Params) (*Prediction, error) {
-	raw, err := io.ReadAll(r)
+	const maxOutputBytes = 8 << 20
+	raw, err := io.ReadAll(io.LimitReader(r, maxOutputBytes+1))
 	if err != nil {
 		return nil, err
+	}
+	if len(raw) > maxOutputBytes {
+		return nil, fmt.Errorf("VOACAP output exceeds %d MiB", maxOutputBytes>>20)
 	}
 	out, err := voacap.Parse(bytes.NewReader(raw))
 	if err != nil {
@@ -417,13 +422,47 @@ func defaultDataDir(executable string) string {
 	candidates = append(candidates,
 		"/usr/share/voacapl/itshfbc",
 		"/usr/local/share/voacapl/itshfbc",
+		"/opt/homebrew/share/voacapl/itshfbc",
+		"/opt/homebrew/opt/voacapl/share/voacapl/itshfbc",
+		"/usr/local/opt/voacapl/share/voacapl/itshfbc",
 	)
+	if runtime.GOOS == "windows" {
+		candidates = append(candidates, `C:\itshfbc`, `C:\itshfbc\data`)
+	}
 	for _, d := range candidates {
 		if st, err := os.Stat(d); err == nil && st.IsDir() {
 			return d
 		}
 	}
 	return ""
+}
+
+// Detect locates a VOACAP engine in the standard installation locations for
+// the current platform. It returns empty strings when none is found.
+func Detect() (string, string) {
+	var candidates []string
+	switch runtime.GOOS {
+	case "windows":
+		candidates = []string{
+			`C:\itshfbc\bin_win\voacapw.exe`,
+			`C:\itshfbc\bin\voacapw.exe`,
+		}
+	default:
+		candidates = []string{"voacapl", "/usr/local/bin/voacapl", "/opt/homebrew/bin/voacapl"}
+		if home, err := os.UserHomeDir(); err == nil {
+			candidates = append(candidates, filepath.Join(home, ".local", "bin", "voacapl"))
+		}
+	}
+	for _, c := range candidates {
+		exe, err := findExecutable(c)
+		if err != nil {
+			continue
+		}
+		if data := defaultDataDir(exe); data != "" {
+			return exe, data
+		}
+	}
+	return "", ""
 }
 
 // findExecutable resolves an executable name to an absolute path (absolute

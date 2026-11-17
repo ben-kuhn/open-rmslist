@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"log"
@@ -27,15 +28,16 @@ import (
 
 // Config configures the HTTP server.
 type Config struct {
-	Version          string
-	ServiceCodes     []string
-	HistoryHours     int
-	VOACAPURL        string
-	VOACAPExecutable string
-	VOACAPDataDir    string
-	TileURL          string
-	TileCacheDir     string
-	VHFMaxRangeKm    float64
+	Version           string
+	ServiceCodes      []string
+	HistoryHours      int
+	VOACAPURL         string
+	VOACAPExecutable  string
+	VOACAPDataDir     string
+	TileURL           string
+	TileCacheDir      string
+	TileCacheMaxBytes int64
+	VHFMaxRangeKm     float64
 	// ServiceCodesPath persists the runtime-configurable service-code list.
 	ServiceCodesPath string
 
@@ -65,6 +67,15 @@ type Server struct {
 	assetVersion string
 
 	tileClient *http.Client
+
+	// Global admission + tile cache state.
+	rankSem      chan struct{}
+	tileSem      chan struct{}
+	tileMu       sync.Mutex
+	tileInFlight map[string]chan struct{}
+	tileBytes    int64
+	tileMaxBytes int64
+	tileEvicting bool
 
 	// refreshCodes reloads the gateway data after the service-code list changes.
 	refreshCodes func(context.Context) error
@@ -105,6 +116,11 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 		assetVersion:  assetVersion(web),
 		tileClient:    &http.Client{Timeout: 15 * time.Second},
 
+		rankSem:      make(chan struct{}, 2),
+		tileSem:      make(chan struct{}, 8),
+		tileInFlight: make(map[string]chan struct{}),
+		tileMaxBytes: cfg.TileCacheMaxBytes,
+
 		desktopToken:   cfg.DesktopToken,
 		onQuit:         cfg.OnQuit,
 		desktopClients: make(map[string]time.Time),
@@ -114,6 +130,12 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 			return err
 		}
 		return s.Refresh(ctx)
+	}
+	if s.tileMaxBytes <= 0 {
+		s.tileMaxBytes = 512 << 20
+	}
+	if cfg.TileCacheDir != "" {
+		s.tileBytes = dirSize(cfg.TileCacheDir)
 	}
 	if s.desktopToken != "" {
 		go s.monitorDesktop()
@@ -140,11 +162,17 @@ func (s *Server) Refresh(ctx context.Context) error {
 	if len(data) == 0 {
 		return nil
 	}
+	if err := cmsapi.ValidateGatewayStatus(data); err != nil {
+		return err
+	}
 	var status cmsapi.GatewayStatus
 	if err := json.Unmarshal(data, &status); err != nil {
 		return err
 	}
 	stations := catalog.Normalize(&status)
+	if len(stations) == 0 {
+		return errors.New("gateway feed produced no stations")
+	}
 	s.stationsMu.Lock()
 	s.stations = stations
 	s.stationsMu.Unlock()
@@ -244,6 +272,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"fetched_at":    at.UTC().Format(time.RFC3339),
 		"stations":      len(stations),
 		"service_codes": s.loader.ServiceCodes(),
+		"stale":         s.loader.LastError() != "",
+		"last_error":    s.loader.LastError(),
 	})
 }
 
@@ -520,6 +550,44 @@ func (s *Server) handleTiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Coalesce concurrent misses for the same tile: one request fetches, the
+	// rest wait and read the cached result.
+	s.tileMu.Lock()
+	wait, busy := s.tileInFlight[cachePath]
+	if !busy {
+		wait = make(chan struct{})
+		s.tileInFlight[cachePath] = wait
+	}
+	s.tileMu.Unlock()
+	if busy {
+		select {
+		case <-wait:
+		case <-r.Context().Done():
+			http.Error(w, "request canceled", http.StatusRequestTimeout)
+			return
+		}
+		if b, err := os.ReadFile(cachePath); err == nil && len(b) > 0 {
+			serveTile(w, b)
+			return
+		}
+		http.Error(w, "tile upstream error", http.StatusBadGateway)
+		return
+	}
+	defer func() {
+		s.tileMu.Lock()
+		delete(s.tileInFlight, cachePath)
+		close(wait)
+		s.tileMu.Unlock()
+	}()
+
+	select {
+	case s.tileSem <- struct{}{}:
+		defer func() { <-s.tileSem }()
+	case <-r.Context().Done():
+		http.Error(w, "request canceled", http.StatusRequestTimeout)
+		return
+	}
+
 	upstream := s.cfg.TileURL
 	if upstream == "" {
 		upstream = defaultTileUpstream
@@ -556,12 +624,91 @@ func (s *Server) handleTiles(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.cfg.TileCacheDir != "" {
 		_ = os.MkdirAll(filepath.Dir(cachePath), 0o755)
-		tmp := cachePath + ".tmp"
-		if os.WriteFile(tmp, b, 0o644) == nil {
-			_ = os.Rename(tmp, cachePath)
+		if tmp, err := os.CreateTemp(filepath.Dir(cachePath), ".tile-*"); err == nil {
+			name := tmp.Name()
+			_, werr := tmp.Write(b)
+			cerr := tmp.Close()
+			if werr == nil && cerr == nil && os.Rename(name, cachePath) == nil {
+				s.tileCacheAdd(len(b))
+			} else {
+				_ = os.Remove(name)
+			}
 		}
 	}
 	serveTile(w, b)
+}
+
+// dirSize returns the total size of regular files under dir.
+func dirSize(dir string) int64 {
+	var total int64
+	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
+}
+
+// tileCacheAdd accounts for a new tile and evicts oldest-first when the quota
+// is exceeded.
+func (s *Server) tileCacheAdd(n int) {
+	if s.cfg.TileCacheDir == "" || s.tileMaxBytes <= 0 {
+		return
+	}
+	s.tileMu.Lock()
+	s.tileBytes += int64(n)
+	over := s.tileBytes > s.tileMaxBytes
+	s.tileMu.Unlock()
+	if over {
+		s.evictTiles()
+	}
+}
+
+func (s *Server) evictTiles() {
+	s.tileMu.Lock()
+	if s.tileEvicting {
+		s.tileMu.Unlock()
+		return
+	}
+	s.tileEvicting = true
+	s.tileMu.Unlock()
+	defer func() {
+		s.tileMu.Lock()
+		s.tileEvicting = false
+		s.tileMu.Unlock()
+	}()
+
+	type entry struct {
+		path string
+		size int64
+		mod  time.Time
+	}
+	var entries []entry
+	var total int64
+	_ = filepath.Walk(s.cfg.TileCacheDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		entries = append(entries, entry{path, info.Size(), info.ModTime()})
+		total += info.Size()
+		return nil
+	})
+	target := s.tileMaxBytes * 8 / 10
+	if total > target {
+		sort.Slice(entries, func(i, j int) bool { return entries[i].mod.Before(entries[j].mod) })
+		for _, e := range entries {
+			if total <= target {
+				break
+			}
+			if os.Remove(e.path) == nil {
+				total -= e.size
+			}
+		}
+	}
+	s.tileMu.Lock()
+	s.tileBytes = total
+	s.tileMu.Unlock()
 }
 
 func serveTile(w http.ResponseWriter, b []byte) {
@@ -629,7 +776,9 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 	mode := r.URL.Query().Get("mode")
 	sc := r.URL.Query().Get("service_code")
 
-	if r.Method == http.MethodPost {
+	switch r.Method {
+	case http.MethodGet:
+	case http.MethodPost:
 		var rr struct {
 			Grid        string `json:"grid"`
 			Band        string `json:"band"`
@@ -637,14 +786,37 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 			ServiceCode string `json:"service_code"`
 		}
 		body := http.MaxBytesReader(w, r.Body, 1<<20)
-		if err := json.NewDecoder(body).Decode(&rr); err == nil {
-			grid, band, mode, sc = rr.Grid, rr.Band, rr.Mode, rr.ServiceCode
+		dec := json.NewDecoder(body)
+		if err := dec.Decode(&rr); err != nil {
+			http.Error(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+			return
 		}
+		var extra any
+		if err := dec.Decode(&extra); err != io.EOF {
+			http.Error(w, "unexpected trailing data", http.StatusBadRequest)
+			return
+		}
+		grid, band, mode, sc = rr.Grid, rr.Band, rr.Mode, rr.ServiceCode
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
 
 	from, err := propagation.ParseLocator(grid)
 	if err != nil {
 		http.Error(w, "invalid grid locator: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Global admission: concurrent ranking requests each spawn workers and can
+	// run up to 500 predictions (or VOACAP subprocesses). Reject excess load
+	// instead of multiplying it.
+	select {
+	case s.rankSem <- struct{}{}:
+		defer func() { <-s.rankSem }()
+	default:
+		w.Header().Set("Retry-After", "10")
+		http.Error(w, "ranking is busy; try again shortly", http.StatusTooManyRequests)
 		return
 	}
 
@@ -702,6 +874,9 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 	if workers < 1 {
 		workers = 1
 	}
+	if workers > 4 {
+		workers = 4
+	}
 	jobs := make(chan int)
 	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {
@@ -746,11 +921,20 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 	}
+dispatch:
 	for i := range cands {
-		jobs <- i
+		select {
+		case jobs <- i:
+		case <-ctx.Done():
+			break dispatch
+		}
 	}
 	close(jobs)
 	wg.Wait()
+	if ctx.Err() != nil {
+		http.Error(w, "ranking timed out", http.StatusServiceUnavailable)
+		return
+	}
 
 	results := make([]rankedEntry, 0, len(out))
 	failed := 0
@@ -764,9 +948,6 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 	if failed > 0 {
 		w.Header().Set("X-Rank-Errors", strconv.Itoa(failed))
 		log.Printf("rank: %d of %d candidates failed", failed, len(out))
-	}
-	if ctx.Err() == context.DeadlineExceeded {
-		log.Printf("rank: deadline (%s) exceeded", timeout)
 	}
 	sort.Slice(results, func(i, j int) bool {
 		if results[i].LinkQuality != results[j].LinkQuality {

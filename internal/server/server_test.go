@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -524,5 +526,102 @@ func TestServiceCodesConfig(t *testing.T) {
 
 	if rec := do(http.MethodPost, `{"codes":[]}`); rec.Code != http.StatusBadRequest {
 		t.Fatalf("empty codes = %d, want 400", rec.Code)
+	}
+}
+
+func TestTileCacheEviction(t *testing.T) {
+	dir := t.TempDir()
+	s := newTestServer(t, nil)
+	s.cfg.TileCacheDir = dir
+	s.tileMaxBytes = 1000
+	base := time.Now().Add(-4 * time.Hour)
+	for i, name := range []string{"old", "mid", "new"} {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, make([]byte, 400), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		at := base.Add(time.Duration(i) * time.Hour)
+		_ = os.Chtimes(p, at, at)
+	}
+	s.tileBytes = 1200
+	s.evictTiles()
+	if _, err := os.Stat(filepath.Join(dir, "old")); !os.IsNotExist(err) {
+		t.Error("oldest tile was not evicted")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "new")); err != nil {
+		t.Error("newest tile was evicted")
+	}
+	if s.tileBytes > 800 {
+		t.Errorf("tileBytes = %d, want <= 800", s.tileBytes)
+	}
+}
+
+func TestHandleTilesCoalesces(t *testing.T) {
+	release := make(chan struct{})
+	var calls int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		<-release
+		_, _ = w.Write([]byte("PNGDATA"))
+	}))
+	defer upstream.Close()
+
+	s := newTestServer(t, nil)
+	s.cfg.TileURL = upstream.URL + "/{z}/{x}/{y}.png"
+
+	var wg sync.WaitGroup
+	codes := make(chan int, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rec := httptest.NewRecorder()
+			s.handleTiles(rec, httptest.NewRequest(http.MethodGet, "/tiles/2/1/1.png", nil))
+			codes <- rec.Code
+		}()
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	close(codes)
+	for code := range codes {
+		if code != http.StatusOK {
+			t.Errorf("status = %d, want 200", code)
+		}
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("upstream calls = %d, want 1 (coalesced)", got)
+	}
+}
+
+func TestHandleRankMethodNotAllowed(t *testing.T) {
+	s := newTestServer(t, fixture())
+	rec := httptest.NewRecorder()
+	s.handleRank(rec, httptest.NewRequest(http.MethodPut, "/api/rank", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("status = %d, want 405", rec.Code)
+	}
+}
+
+func TestHandleRankInvalidBody(t *testing.T) {
+	s := newTestServer(t, fixture())
+	for _, body := range []string{`not json`, `{"grid":"EN43bx"} {}`} {
+		rec := httptest.NewRecorder()
+		s.handleRank(rec, httptest.NewRequest(http.MethodPost, "/api/rank", strings.NewReader(body)))
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("body %q: status = %d, want 400", body, rec.Code)
+		}
+	}
+}
+
+func TestHandleRankBusy(t *testing.T) {
+	s := newTestServer(t, fixture())
+	s.rankSem <- struct{}{}
+	s.rankSem <- struct{}{}
+	defer func() { <-s.rankSem; <-s.rankSem }()
+	rec := httptest.NewRecorder()
+	s.handleRank(rec, httptest.NewRequest(http.MethodPost, "/api/rank", strings.NewReader(`{"grid":"EN43bx"}`)))
+	if rec.Code != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429", rec.Code)
 	}
 }

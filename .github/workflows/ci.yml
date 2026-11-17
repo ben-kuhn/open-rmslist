@@ -13,14 +13,22 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "stable"
           cache: true
       - name: gofmt check
         run: test -z "$(gofmt -l .)"
       - name: go vet
         run: go vet ./...
+      - name: go test (race)
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
       - name: go test (with coverage)
         run: go test -coverprofile=coverage.out ./...
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
       - name: coverage floor
         run: |
           TOTAL=$(go tool cover -func=coverage.out | tail -1 | grep -oE '[0-9]+\.[0-9]+')
@@ -54,7 +62,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "stable"
       - name: build
         env:
           CGO_ENABLED: "0"
@@ -70,6 +78,38 @@ jobs:
           name: rms-radar-web-${{ matrix.artos }}-${{ matrix.goarch }}
           path: dist/rms-radar-web-${{ matrix.artos }}-${{ matrix.goarch }}
 
+  e2e:
+    name: Browser tests
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: start the server
+        run: |
+          go build -o /tmp/rms-radar .
+          /tmp/rms-radar -d -listen 127.0.0.1:8079 -cache-dir /tmp/rms-data > /tmp/rms-radar.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8079/api/health >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8079/api/health
+      - name: install Playwright
+        working-directory: tests/e2e
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: run browser tests
+        working-directory: tests/e2e
+        env:
+          BASE_URL: http://127.0.0.1:8079
+        run: npx playwright test
+
   desktop:
     name: Desktop build (${{ matrix.os }})
     needs: test
@@ -82,7 +122,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "stable"
       - name: install Linux webview dependencies
         if: runner.os == 'Linux'
         run: |

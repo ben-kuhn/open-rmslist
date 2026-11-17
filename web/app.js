@@ -7,6 +7,8 @@ const state = {
   config: {},
   conditions: null,
   ranked: new Map(),     // callsign -> best ranked entry
+  rankSeq: 0,            // generation guard for in-flight rank requests
+  rankAbort: null,       // AbortController for the current rank request
   markers: new Map(),    // callsign -> {base, ranked} Leaflet markers
   expanded: new Set(),   // callsigns whose full channel list is shown
   filters: { serviceCode: "", mode: "", band: "" },
@@ -397,13 +399,19 @@ async function doRank() {
     mode: $("mode").value,
     service_code: $("service-code").value,
   };
+  const seq = ++state.rankSeq;
+  if (state.rankAbort) state.rankAbort.abort();
+  const ac = new AbortController();
+  state.rankAbort = ac;
   setNote("Ranking…");
   try {
     const { data: results, headers } = await fetchWithHeaders("/api/rank", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
+      signal: ac.signal,
     });
+    if (seq !== state.rankSeq) return; // superseded by a filter change/new rank
     state.ranked = new Map();
     for (const r of results) {
       if (!state.ranked.has(r.callsign) || state.ranked.get(r.callsign).link_quality < r.link_quality) {
@@ -421,11 +429,17 @@ async function doRank() {
     setNote(msg);
     applyFilters();
   } catch (err) {
+    if (ac.signal.aborted || seq !== state.rankSeq) return;
     setNote("Ranking failed: " + err.message);
   }
 }
 
 function clearRank() {
+  state.rankSeq++;
+  if (state.rankAbort) {
+    state.rankAbort.abort();
+    state.rankAbort = null;
+  }
   state.ranked = new Map();
   setNote("");
   applyFilters();

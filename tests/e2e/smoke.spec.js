@@ -56,7 +56,7 @@ test("client setup guide is served", async ({ page }) => {
   }
 });
 
-test("mobile map/list tabs with a scrollable list", async ({ page }) => {
+test("mobile map/list tabs with a scrollable list", async ({ page, request }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(BASE, { waitUntil: "networkidle", timeout: 60_000 });
 
@@ -75,8 +75,12 @@ test("mobile map/list tabs with a scrollable list", async ({ page }) => {
   const scrollable = await page.locator("#list").evaluate((el) => el.scrollHeight > el.clientHeight);
   expect(scrollable).toBeTruthy();
 
-  // Picking a station jumps back to the map and opens its info popup.
-  await page.locator("#list li", { hasText: "KU0HN-10" }).first().click();
+  // Picking a station jumps back to the map and opens its info popup. Choose
+  // the target from the live data instead of hardcoding a callsign.
+  const stations = await (await request.get(BASE + "/api/gateways")).json();
+  const target = stations.find((s) => s.latitude && s.longitude && s.channels && s.channels.length);
+  expect(target, "expected at least one located gateway").toBeTruthy();
+  await page.locator("#list li", { hasText: target.callsign }).first().click();
   await expect(page.locator("#map")).toBeVisible();
   await expect(page.locator("#list-panel")).toBeHidden();
   await expect(page.locator(".leaflet-popup-content")).toContainText("KU0HN-10");
@@ -88,4 +92,23 @@ test("gateway setup guide is served", async ({ page }) => {
   await expect(page.locator("h1")).toContainText("Setting up a Winlink gateway");
   await expect(page.locator("h2", { hasText: "RMS Trimode" })).toHaveCount(1);
   await expect(page.locator("h2", { hasText: "BPQ32" })).toHaveCount(1);
+});
+
+test("a superseded rank does not repopulate the list", async ({ page }) => {
+  await page.route("**/api/rank", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    try {
+      await route.continue();
+    } catch (_) {
+      // The request was aborted by the filter change; nothing to continue.
+    }
+  });
+  await page.goto(BASE, { waitUntil: "networkidle", timeout: 60_000 });
+  await page.fill("#grid", "EN43bx");
+  await page.click("#rank-btn");
+  await page.waitForTimeout(150);
+  // Changing a filter clears the rank and aborts the in-flight request.
+  await page.selectOption("#band", { index: 1 });
+  await page.waitForTimeout(3500);
+  expect(await page.locator(".q-badge").count()).toBe(0);
 });
