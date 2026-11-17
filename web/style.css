@@ -61,6 +61,8 @@ body {
 }
 .notice-body { flex: 1; min-width: 0; }
 .notice-lead { color: var(--accent); font-weight: 700; }
+.notice a { color: var(--accent); text-underline-offset: 2px; }
+.notice a:hover { color: var(--text); }
 .notice-close {
   flex: none;
   padding: 2px 7px;

@@ -14,7 +14,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 // Bump the version to show the notice again after its wording changes.
-const NOTICE_KEY = "rmslist-notice-v1";
+const NOTICE_KEY = "rmslist-notice-v2";
 
 const BAND_ORDER = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m","6m","2m","1.25m","70cm","33cm","23cm","HF","Other"];
 
