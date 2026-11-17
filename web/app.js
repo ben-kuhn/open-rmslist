@@ -13,6 +13,9 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
+// Bump the version to show the notice again after its wording changes.
+const NOTICE_KEY = "rmslist-notice-v1";
+
 const BAND_ORDER = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m","6m","2m","1.25m","70cm","33cm","23cm","HF","Other"];
 
 // VHF/UHF starts at 30 MHz (6 m and up). For these line-of-sight bands a 0%
@@ -383,6 +386,22 @@ function setNote(msg) {
   $("conditions").hidden = !(msg || state.conditions);
 }
 
+/* ---------- notice ---------- */
+function initNotice() {
+  const el = $("notice");
+  if (!el) return;
+  try {
+    if (localStorage.getItem(NOTICE_KEY)) return;
+  } catch (_) {}
+  el.hidden = false;
+  $("notice-close").addEventListener("click", () => {
+    el.hidden = true;
+    try { localStorage.setItem(NOTICE_KEY, "1"); } catch (_) {}
+    // The map grows into the freed space; let Leaflet re-measure it.
+    if (map) map.invalidateSize();
+  });
+}
+
 /* ---------- events ---------- */
 function wireEvents() {
   $("service-code").addEventListener("change", (e) => {
@@ -402,6 +421,7 @@ function wireEvents() {
   let theme = "dark";
   try { theme = localStorage.getItem("rmslist-theme") || "dark"; } catch (_) {}
   applyTheme(theme);
+  initNotice();
   initMap();
   wireEvents();
   try {

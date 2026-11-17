@@ -30,6 +30,9 @@
 
 * { box-sizing: border-box; }
 
+/* The `hidden` attribute must win over layout rules like `.notice{display:flex}`. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -43,6 +46,35 @@ body {
   flex-direction: column;
   overflow: hidden;
 }
+
+/* ---- notice ---- */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+}
+.notice-body { flex: 1; min-width: 0; }
+.notice-lead { color: var(--accent); font-weight: 700; }
+.notice-close {
+  flex: none;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.notice-close:hover,
+.notice-close:focus-visible { background: var(--bg-elevated); color: var(--text); }
 
 /* ---- top bar ---- */
 .topbar {
