@@ -7,6 +7,7 @@ const state = {
   config: {},
   conditions: null,
   ranked: new Map(),     // callsign -> best ranked entry
+  markers: new Map(),    // callsign -> {base, ranked} Leaflet markers
   filters: { serviceCode: "", mode: "", band: "" },
   theme: "dark",
 };
@@ -220,6 +221,7 @@ function applyFilters() {
 function renderMarkers(stations) {
   markerLayer.clearLayers();
   rankLayer.clearLayers();
+  state.markers.clear();
 
   for (const st of stations) {
     if (!st.latitude && !st.longitude) continue;
@@ -233,6 +235,7 @@ function renderMarkers(stations) {
     });
     marker.bindPopup(popupHTML(st), { maxWidth: 320 });
     markerLayer.addLayer(marker);
+    const entry = { base: marker };
 
     // Ranked highlight (larger, white-ringed, colored by quality).
     const r = state.ranked.get(st.callsign);
@@ -247,7 +250,9 @@ function renderMarkers(stations) {
       });
       rm.bindPopup(popupHTML(st, r), { maxWidth: 320 });
       rankLayer.addLayer(rm);
+      entry.ranked = rm;
     }
+    state.markers.set(st.callsign, entry);
   }
 }
 
@@ -335,12 +340,17 @@ function renderList(stations) {
       `</div>`;
     li.addEventListener("click", () => {
       if (!st.latitude && !st.longitude) return;
-      const show = () => map.setView([st.latitude, st.longitude], Math.max(map.getZoom(), 8));
+      const focus = () => {
+        map.setView([st.latitude, st.longitude], Math.max(map.getZoom(), 8));
+        const m = state.markers.get(st.callsign);
+        const marker = m && (m.ranked || m.base);
+        if (marker) marker.openPopup();
+      };
       if (MOBILE_QUERY.matches && document.documentElement.dataset.mobileView !== "map") {
         setMobileView("map");
-        requestAnimationFrame(() => { map.invalidateSize(); show(); });
+        requestAnimationFrame(() => { map.invalidateSize(); focus(); });
       } else {
-        show();
+        focus();
       }
     });
     list.appendChild(li);

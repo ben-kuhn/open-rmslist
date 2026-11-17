@@ -75,8 +75,9 @@ test("mobile map/list tabs with a scrollable list", async ({ page }) => {
   const scrollable = await page.locator("#list").evaluate((el) => el.scrollHeight > el.clientHeight);
   expect(scrollable).toBeTruthy();
 
-  // Picking a station jumps back to the map.
+  // Picking a station jumps back to the map and opens its info popup.
   await page.locator("#list li", { hasText: "KU0HN-10" }).first().click();
   await expect(page.locator("#map")).toBeVisible();
   await expect(page.locator("#list-panel")).toBeHidden();
+  await expect(page.locator(".leaflet-popup-content")).toContainText("KU0HN-10");
 });
