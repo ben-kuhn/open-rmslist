@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -35,6 +36,13 @@ type Config struct {
 	TileURL          string
 	TileCacheDir     string
 	VHFMaxRangeKm    float64
+
+	// DesktopToken enables the desktop lifecycle endpoints. It is non-empty
+	// only when the app was launched in desktop (double-click) mode.
+	DesktopToken string
+	// OnQuit asks the process to exit (the desktop window/tab is gone, or the
+	// user pressed Quit).
+	OnQuit func()
 }
 
 // Server serves the web UI and JSON API.
@@ -55,6 +63,15 @@ type Server struct {
 	assetVersion string
 
 	tileClient *http.Client
+
+	// Desktop (double-click) lifecycle: the page checks in while it is open,
+	// and the process exits once every page has gone away.
+	desktopToken   string
+	onQuit         func()
+	desktopMu      sync.Mutex
+	desktopClients map[string]time.Time
+	desktopSeen    bool
+	desktopEmptyAt time.Time
 }
 
 func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heuristic) *Server {
@@ -73,7 +90,7 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 	}
 	predictors = append(predictors, heur)
 
-	return &Server{
+	s := &Server{
 		cfg:           cfg,
 		web:           web,
 		loader:        loader,
@@ -82,7 +99,15 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 		voacapEnabled: voacapEnabled,
 		assetVersion:  assetVersion(web),
 		tileClient:    &http.Client{Timeout: 15 * time.Second},
+
+		desktopToken:   cfg.DesktopToken,
+		onQuit:         cfg.OnQuit,
+		desktopClients: make(map[string]time.Time),
 	}
+	if s.desktopToken != "" {
+		go s.monitorDesktop()
+	}
+	return s
 }
 
 // assetVersion returns a short hash of the mutable web assets. When app.js,
@@ -123,6 +148,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/conditions", s.handleConditions)
 	mux.HandleFunc("/api/rank", s.handleRank)
 	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/api/desktop/hello", s.handleDesktopHello)
+	mux.HandleFunc("/api/desktop/beat", s.handleDesktopBeat)
+	mux.HandleFunc("/api/desktop/bye", s.handleDesktopBye)
+	mux.HandleFunc("/api/desktop/quit", s.handleDesktopQuit)
 	mux.HandleFunc("/tiles/", s.handleTiles)
 
 	fileServer := http.FileServer(http.FS(s.web))
@@ -242,6 +271,125 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"voacap":        s.voacapEnabled,
 		"tile_url":      proxyTilePath,
 	})
+}
+
+// ---- desktop (double-click) lifecycle ----
+//
+// In desktop mode main generates a random token and opens the browser at
+// /?desktop=<token>. The page registers, heartbeats, and sends a beacon when it
+// closes. When every registered page has gone away, the process exits. -d
+// (daemon) disables the token entirely, so servers never auto-exit.
+
+const (
+	desktopGrace     = 15 * time.Second // wait this long after the last page closes
+	desktopClientTTL = 2 * time.Minute  // drop pages that stop heartbeating
+)
+
+func (s *Server) desktopAuthorized(w http.ResponseWriter, r *http.Request) bool {
+	if s.desktopToken == "" {
+		http.NotFound(w, r)
+		return false
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return false
+	}
+	got := r.URL.Query().Get("token")
+	if subtle.ConstantTimeCompare([]byte(got), []byte(s.desktopToken)) != 1 {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return false
+	}
+	return true
+}
+
+func (s *Server) desktopTouch(id string) {
+	if id == "" {
+		return
+	}
+	s.desktopMu.Lock()
+	defer s.desktopMu.Unlock()
+	s.desktopClients[id] = time.Now()
+	s.desktopSeen = true
+	s.desktopEmptyAt = time.Time{}
+}
+
+func (s *Server) desktopRemove(id string) {
+	s.desktopMu.Lock()
+	defer s.desktopMu.Unlock()
+	delete(s.desktopClients, id)
+	if s.desktopSeen && len(s.desktopClients) == 0 && s.desktopEmptyAt.IsZero() {
+		s.desktopEmptyAt = time.Now()
+	}
+}
+
+func (s *Server) monitorDesktop() {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		now := time.Now()
+		s.desktopMu.Lock()
+		for id, seen := range s.desktopClients {
+			if now.Sub(seen) > desktopClientTTL {
+				delete(s.desktopClients, id)
+			}
+		}
+		if s.desktopSeen && len(s.desktopClients) == 0 && s.desktopEmptyAt.IsZero() {
+			s.desktopEmptyAt = now
+		}
+		quit := s.desktopSeen && len(s.desktopClients) == 0 &&
+			!s.desktopEmptyAt.IsZero() && now.Sub(s.desktopEmptyAt) > desktopGrace
+		s.desktopMu.Unlock()
+		if quit {
+			if s.onQuit != nil {
+				s.onQuit()
+			}
+			return
+		}
+	}
+}
+
+func (s *Server) handleDesktopHello(w http.ResponseWriter, r *http.Request) {
+	if !s.desktopAuthorized(w, r) {
+		return
+	}
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+	s.desktopTouch(id)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleDesktopBeat(w http.ResponseWriter, r *http.Request) {
+	if !s.desktopAuthorized(w, r) {
+		return
+	}
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+	s.desktopTouch(id)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleDesktopBye(w http.ResponseWriter, r *http.Request) {
+	if !s.desktopAuthorized(w, r) {
+		return
+	}
+	s.desktopRemove(r.URL.Query().Get("id"))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleDesktopQuit(w http.ResponseWriter, r *http.Request) {
+	if !s.desktopAuthorized(w, r) {
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+	if s.onQuit != nil {
+		go s.onQuit()
+	}
 }
 
 // proxyTilePath is the same-origin tile endpoint the browser uses; the server

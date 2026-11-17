@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/ben-kuhn/open-rmslist/internal/catalog"
 	"github.com/ben-kuhn/open-rmslist/internal/cmsapi"
@@ -396,5 +397,69 @@ func TestRankCapKeepsNearest(t *testing.T) {
 	}
 	if calls[fmt.Sprintf("S%03d", maxRankCandidates+99)] {
 		t.Error("farthest station should have been truncated")
+	}
+}
+
+func TestDesktopSession(t *testing.T) {
+	dir := t.TempDir()
+	loader := cmsapi.NewLoader(dir, []string{"PUBLIC"}, 48, "test")
+	heur := propagation.NewHeuristic(dir)
+	quit := make(chan struct{}, 1)
+	s := New(Config{
+		Version:      "test",
+		ServiceCodes: []string{"PUBLIC"},
+		DesktopToken: "secret",
+		OnQuit:       func() { quit <- struct{}{} },
+	}, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}, loader, heur)
+	h := s.Handler()
+
+	post := func(path string) int {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))
+		return rec.Code
+	}
+
+	if got := post("/api/desktop/hello?token=wrong&id=a"); got != http.StatusForbidden {
+		t.Errorf("wrong token: status %d, want 403", got)
+	}
+	if got := post("/api/desktop/hello?token=secret"); got != http.StatusBadRequest {
+		t.Errorf("missing id: status %d, want 400", got)
+	}
+	if got := post("/api/desktop/hello?token=secret&id=a"); got != http.StatusNoContent {
+		t.Errorf("hello: status %d, want 204", got)
+	}
+	s.desktopMu.Lock()
+	if n := len(s.desktopClients); n != 1 {
+		t.Errorf("registered clients = %d, want 1", n)
+	}
+	s.desktopMu.Unlock()
+
+	if got := post("/api/desktop/bye?token=secret&id=a"); got != http.StatusNoContent {
+		t.Errorf("bye: status %d, want 204", got)
+	}
+	s.desktopMu.Lock()
+	n := len(s.desktopClients)
+	emptyAtSet := !s.desktopEmptyAt.IsZero()
+	s.desktopMu.Unlock()
+	if n != 0 || !emptyAtSet {
+		t.Errorf("after bye: clients = %d, emptyAt set = %v; want 0, true", n, emptyAtSet)
+	}
+
+	if got := post("/api/desktop/quit?token=secret"); got != http.StatusNoContent {
+		t.Errorf("quit: status %d, want 204", got)
+	}
+	select {
+	case <-quit:
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnQuit was not called")
+	}
+}
+
+func TestDesktopEndpointsDisabledWithoutToken(t *testing.T) {
+	s := newTestServer(t, fixture())
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/desktop/hello?token=x&id=a", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status %d, want 404 when desktop mode is off", rec.Code)
 	}
 }

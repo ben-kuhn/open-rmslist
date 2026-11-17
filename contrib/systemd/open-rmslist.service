@@ -11,7 +11,7 @@ Type=simple
 User=open-rmslist
 Group=open-rmslist
 # Bind to 127.0.0.1 for a private instance, or 0.0.0.0 to serve your LAN.
-ExecStart=/usr/local/bin/open-rmslist -listen 127.0.0.1:8079 -cache-dir /var/lib/open-rmslist
+ExecStart=/usr/local/bin/open-rmslist -d -listen 127.0.0.1:8079 -cache-dir /var/lib/open-rmslist
 Restart=on-failure
 RestartSec=5
 

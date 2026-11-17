@@ -2,15 +2,17 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"embed"
+	"encoding/hex"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -46,9 +48,15 @@ func main() {
 		webDir       = flag.String("web-dir", envOr("OPENRMSLIST_WEB_DIR", ""), "serve web assets from this directory instead of the embedded copy")
 		tileURL      = flag.String("tile-url", envOr("OPENRMSLIST_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"), "upstream tile URL template proxied+cached by the server (OSM by default)")
 		vhfRange     = flag.Float64("vhf-max-range", envFloat("OPENRMSLIST_VHF_MAX_RANGE", 400), "max plausible VHF/UHF (>=30 MHz) path length in km for ranking (distance-based; set large to effectively disable)")
+		daemonShort  = flag.Bool("d", envBool("OPENRMSLIST_DAEMON", false), "run as a background service (no browser, no auto-exit)")
+		daemonLong   = flag.Bool("daemon", envBool("OPENRMSLIST_DAEMON", false), "run as a background service (alias for -d)")
 		openBrowser  = flag.Bool("open-browser", envBool("OPENRMSLIST_OPEN_BROWSER", defaultOpenBrowser()), "open the web UI in the default browser on start")
 	)
 	flag.Parse()
+	isDaemon := *daemonShort || *daemonLong
+	if isDaemon {
+		*openBrowser = false
+	}
 
 	// Optional: bootstrap a VOACAP engine for platforms without package
 	// management (macOS, Windows). Only runs when a URL is explicitly set.
@@ -66,11 +74,23 @@ func main() {
 	}
 
 	codes := splitCSV(*serviceCodes)
-	log.Printf("open-rmslist %s | service codes: %v", version, codes)
+	mode := "desktop"
+	if isDaemon {
+		mode = "daemon"
+	}
+	log.Printf("open-rmslist %s | %s mode | service codes: %v", version, mode, codes)
 
 	webFSys, err := webFilesystem(*webDir)
 	if err != nil {
 		log.Fatalf("web: %v", err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	desktopToken := ""
+	if !isDaemon {
+		desktopToken = randomHex(16)
 	}
 
 	loader := cmsapi.NewLoader(*cacheDir, codes, *historyHours, *accessKey)
@@ -85,10 +105,9 @@ func main() {
 		TileURL:          *tileURL,
 		TileCacheDir:     filepath.Join(*cacheDir, "tiles"),
 		VHFMaxRangeKm:    *vhfRange,
+		DesktopToken:     desktopToken,
+		OnQuit:           stop,
 	}, webFSys, loader, heur)
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	// Seed immediately from cache or the embedded snapshot (never blocks on the
 	// network), then refresh from the network in the background.
@@ -133,9 +152,13 @@ func main() {
 	}
 
 	if *openBrowser {
+		pageURL := browserURL(*addr)
+		if desktopToken != "" {
+			pageURL += "/?desktop=" + desktopToken
+		}
 		go func() {
 			time.Sleep(400 * time.Millisecond)
-			if err := browser.Open(browserURL(*addr)); err != nil {
+			if err := browser.Open(pageURL); err != nil {
 				log.Printf("open browser: %v", err)
 			}
 		}()
@@ -179,8 +202,16 @@ func browserURL(addr string) string {
 }
 
 func defaultOpenBrowser() bool {
-	// Auto-open on desktop platforms by default; headless Unix stays quiet.
-	return runtime.GOOS == "windows" || runtime.GOOS == "darwin"
+	// Desktop (double-click) mode is the default everywhere; -d serves headless.
+	return true
+}
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
 }
 
 func defaultVOACAPDownloadDir() string {

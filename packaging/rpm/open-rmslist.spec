@@ -52,10 +52,12 @@ go build -trimpath -ldflags "-s -w -X main.version=%{version}" -o open-rmslist .
 %install
 install -Dm755 open-rmslist %{buildroot}%{_bindir}/open-rmslist
 install -Dm644 contrib/systemd/open-rmslist.service %{buildroot}%{_unitdir}/open-rmslist.service
+install -Dm644 contrib/desktop/open-rmslist.desktop %{buildroot}%{_datadir}/applications/open-rmslist.desktop
 
 %files
 %{_bindir}/open-rmslist
 %{_unitdir}/open-rmslist.service
+%{_datadir}/applications/open-rmslist.desktop
 %license LICENSE
 %doc README.md
 

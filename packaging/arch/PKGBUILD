@@ -24,5 +24,6 @@ package() {
   install -Dm755 open-rmslist "${pkgdir}/usr/bin/open-rmslist"
   install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
   install -Dm644 contrib/systemd/open-rmslist.service "${pkgdir}/usr/lib/systemd/system/open-rmslist.service"
+  install -Dm644 contrib/desktop/open-rmslist.desktop "${pkgdir}/usr/share/applications/open-rmslist.desktop"
   # The web UI is embedded in the binary; no separate assets to install.
 }

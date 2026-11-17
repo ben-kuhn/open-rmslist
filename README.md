@@ -10,6 +10,8 @@ stations by predicted link success using current propagation conditions.
 
 - **Dark mode (default) and light mode**
 - **Mobile-friendly** — on narrow screens, Map/List tabs keep the map visible and the gateway list scrolls in its own pane
+- **Double-click desktop mode** — opens your browser and exits when the last tab
+  closes; use `-d` for a headless service
 - **Service-code dropdown** populated from the fetched gateway list
 - **Service-code aware** — gateways are shown and filtered by the Winlink
   service code the API returns (`PUBLIC`, `EMCOMM`, `MERCURY`, `VARDEFM`, …);
@@ -49,11 +51,17 @@ Requires Go 1.23+ (no third-party Go dependencies; the web UI is embedded).
 
 ```bash
 go build -o open-rmslist .
-./open-rmslist                 # serves on http://localhost:8079
+./open-rmslist                 # desktop mode: opens the map; closing the tab quits
 ```
 
-Your default browser opens automatically on macOS and Windows. On Linux/BSD,
-open <http://localhost:8079> yourself (or pass `-open-browser`).
+The default is **desktop mode** on every platform: the app starts a local server,
+opens your default browser, and exits when the last browser tab for it closes.
+For a headless service that stays running:
+
+```bash
+./open-rmslist -d              # service mode: no browser, no auto-exit
+./open-rmslist -d -listen 0.0.0.0:8079
+```
 
 ### Configuration
 
@@ -74,7 +82,23 @@ open <http://localhost:8079> yourself (or pass `-open-browser`).
 | `-web-dir` | `OPENRMSLIST_WEB_DIR` | *(embedded)* | Serve web assets from a directory instead |
 | `-tile-url` | `OPENRMSLIST_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Upstream tile template; proxied and disk-cached by the server |
 | `-vhf-max-range` | `OPENRMSLIST_VHF_MAX_RANGE` | `400` | Max plausible VHF/UHF path (km) for ranking — distance-based, not continent-based; set large to disable |
-| `-open-browser` | `OPENRMSLIST_OPEN_BROWSER` | macOS/Windows: `true`, else `false` | Open the browser on start |
+| `-d`, `-daemon` | `OPENRMSLIST_DAEMON` | `false` | Service mode: do not open a browser and never auto-exit |
+| `-open-browser` | `OPENRMSLIST_OPEN_BROWSER` | `true` | Open the web UI in the default browser on start (desktop mode) |
+
+### Desktop mode vs service mode
+
+| | Desktop (default) | `-d` / `--daemon` |
+|---|---|---|
+| Opens the browser | yes | no |
+| Exits when the UI closes | yes (after the last tab, ~15 s grace) | never |
+| Quit button in the UI | yes | no |
+| Intended for | double-click / local use | systemd, NixOS, containers |
+
+Desktop mode generates a random local token and opens `/?desktop=<token>`. The
+page checks in every few seconds; closing the tab sends a beacon, and the process
+exits after a short grace so reloads and multiple tabs are safe. The **Quit**
+button exits immediately. The desktop endpoints are token-guarded and disabled
+entirely in service mode.
 
 ### Service codes
 
@@ -204,11 +228,48 @@ First-class targets (CI builds all of them, static binaries via
 
 Packaging included:
 
-- **systemd unit** — `contrib/systemd/open-rmslist.service`
+- **systemd unit** — `contrib/systemd/open-rmslist.service` (runs with `-d`)
 - **Arch** — `packaging/arch/PKGBUILD`
 - **Nix / NixOS** — see the sibling
   [`nix-ham-packages`](https://github.com/ben-kuhn/nix-ham-packages) overlay
-  (`pkgs.open-rmslist` + `services.open-rmslist` module)
+  (`pkgs.open-rmslist` + `services.open-rmslist` module, `-d` by default)
+
+### Double-click packaging
+
+Release artifacts include:
+
+- **macOS** — `open-rmslist.app.zip`. The bundle is unsigned; on first launch
+  use right-click → **Open**, or run
+  `xattr -dr com.apple.quarantine open-rmslist.app`.
+- **Windows** — the main `.exe` is a GUI build (no console window); a
+  `-console.exe` is included for service/troubleshooting use.
+- **Linux** — an `open-rmslist.desktop` launcher is included in the tarball and
+  installed by the Arch/RPM/Nix packages (`Exec=open-rmslist`).
+
+### Desktop GUI options
+
+The default desktop mode deliberately uses the user's browser, which keeps the
+project a single dependency-free binary. If you want a real native window
+instead, the main routes are:
+
+1. **Native webview (best native feel).** A separate build or build tag using
+   [`webview/webview`](https://github.com/webview/webview) or Wails. macOS uses
+   WKWebView, Windows WebView2, and Linux WebKitGTK. Closing the window is a real
+   quit — no heartbeat heuristic. Costs: CGo, per-OS SDK/runtime dependencies,
+   larger artifacts, and code signing/notarization for clean distribution. Keep
+   the headless binary for servers.
+2. **System tray wrapper.** Add `fyne.io/systray` or `getlantern/systray` with
+   Open/Quit menu items; the UI remains in the browser. Works well on
+   Linux/Windows, but closing the browser is not the same as quitting, so a tray
+   Quit is still needed.
+3. **App-mode browser window.** Launch Chromium-based browsers with
+   `--app=http://127.0.0.1:8079` for a chromeless window, keeping the current
+   beacon-based exit. Small change, but browser-dependent.
+4. **Current: browser + heartbeat.** No new dependencies, works on every
+   platform, at the cost of a small auto-exit grace and a Quit button.
+
+The current mode is the lowest-friction default; the webview route is the one to
+take if a true `.app`/`.exe` window and a definitive "close = quit" are required.
 
 ### CI/CD
 
@@ -236,9 +297,11 @@ authentication**. Treat it as a LAN/loopback service:
 
 - **Binds to `127.0.0.1:8079` by default.** Pass `-listen 0.0.0.0:8079` (and
   put it behind a reverse proxy or VPN) only if you intend to expose it.
-- **No auth, no cookies, no write endpoints.** The API is read-only; `/api/rank`
-  only computes predictions. It is still a compute endpoint, so it is capped
-  (500 candidates per request) and time-limited.
+- **No auth, no cookies.** The data API is read-only; `/api/rank` only computes
+  predictions. It is still a compute endpoint, so it is capped (500 candidates
+  per request) and time-limited. The only state-changing endpoints are the
+  desktop lifecycle ones (`/api/desktop/*`); they require the random token from
+  the launch URL and are disabled in `-d` service mode.
 - **Security headers** (CSP, `X-Content-Type-Options: nosniff`,
   `X-Frame-Options`, `Referrer-Policy`) are set on every response, and all
   third-party gateway data is HTML-escaped before rendering.

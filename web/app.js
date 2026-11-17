@@ -21,6 +21,9 @@ const NOTICE_KEY = "rmslist-notice-v2";
 const MOBILE_VIEW_KEY = "rmslist-mobile-view";
 const MOBILE_QUERY = window.matchMedia("(max-width: 720px)");
 
+// Desktop (double-click) mode: main opens /?desktop=<token>.
+const DESKTOP_TOKEN = new URLSearchParams(location.search).get("desktop");
+
 const BAND_ORDER = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m","6m","2m","1.25m","70cm","33cm","23cm","HF","Other"];
 
 // VHF/UHF starts at 30 MHz (6 m and up). For these line-of-sight bands a 0%
@@ -476,6 +479,49 @@ function initMobileTabs() {
   }
 }
 
+/* ---------- desktop session (double-click mode) ---------- */
+function initDesktopSession() {
+  const quitBtn = $("quit-btn");
+  if (!DESKTOP_TOKEN) return;
+  if (quitBtn) quitBtn.hidden = false;
+
+  const id = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const url = (op) =>
+    `/api/desktop/${op}?token=${encodeURIComponent(DESKTOP_TOKEN)}&id=${encodeURIComponent(id)}`;
+  const hello = () => fetch(url("hello"), { method: "POST", keepalive: true }).catch(() => {});
+  const beat = () => fetch(url("beat"), { method: "POST", keepalive: true }).catch(() => {});
+  const bye = () => { try { navigator.sendBeacon(url("bye")); } catch (_) {} };
+
+  let timer = null;
+  const startBeat = () => { if (!timer) timer = setInterval(beat, 5000); };
+  const stopBeat = () => { if (timer) { clearInterval(timer); timer = null; } };
+
+  hello();
+  startBeat();
+
+  window.addEventListener("pagehide", (e) => {
+    if (e.persisted) return; // bfcache: the page may come back
+    stopBeat();
+    bye();
+  });
+  window.addEventListener("pageshow", (e) => {
+    if (!e.persisted) return;
+    hello();
+    startBeat();
+  });
+
+  if (quitBtn) {
+    quitBtn.addEventListener("click", async () => {
+      stopBeat();
+      try { await fetch(url("quit"), { method: "POST", keepalive: true }); } catch (_) {}
+      document.body.innerHTML =
+        '<div class="doc"><h1>open-rmslist has stopped</h1><p>You can close this tab.</p></div>';
+    });
+  }
+}
+
 /* ---------- events ---------- */
 function wireEvents() {
   $("service-code").addEventListener("change", (e) => {
@@ -498,6 +544,7 @@ function wireEvents() {
   initNotice();
   initMap();
   initMobileTabs();
+  initDesktopSession();
   wireEvents();
   try {
     await load();
