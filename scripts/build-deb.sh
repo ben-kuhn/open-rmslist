@@ -35,12 +35,13 @@ ROOT="$(mktemp -d)"
 trap 'rm -rf "$ROOT"' EXIT
 
 mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/bin" "$ROOT/usr/share/applications" \
-  "$ROOT/usr/share/doc/$PKG" "$ROOT/lib/systemd/system"
+  "$ROOT/usr/share/doc/$PKG"
 
 install -Dm755 "$BIN" "$ROOT/usr/bin/$INSTALL_NAME"
 install -Dm644 LICENSE "$ROOT/usr/share/doc/$PKG/copyright"
 
 if [ "$KIND" = "web" ]; then
+  mkdir -p "$ROOT/lib/systemd/system"
   install -Dm644 packaging/common/rms-radar.service "$ROOT/lib/systemd/system/rms-radar.service"
   install -Dm644 contrib/desktop/rms-radar.desktop "$ROOT/usr/share/applications/rms-radar.desktop"
 else

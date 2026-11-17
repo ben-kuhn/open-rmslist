@@ -20,7 +20,7 @@ sudo systemctl enable --now rms-radar
 **Fedora / RHEL**
 
 ```bash
-sudo dnf install ./rms-radar-<version>-1.x86_64.rpm
+sudo dnf install ./rms-radar-<version>-1.*.x86_64.rpm
 sudo systemctl enable --now rms-radar
 ```
 
