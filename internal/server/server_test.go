@@ -247,6 +247,9 @@ func TestHandleGateways(t *testing.T) {
 	if len(st) != 2 {
 		t.Fatalf("got %d stations, want 2", len(st))
 	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", got)
+	}
 }
 
 func TestHandleConditions(t *testing.T) {

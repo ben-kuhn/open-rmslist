@@ -427,5 +427,8 @@ func parseRangeKm(s string) float64 {
 
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
+	// Gateway lists and propagation data are refreshed from Winlink/upstream and
+	// must never be cached (by the browser or a CDN).
+	w.Header().Set("Cache-Control", "no-store")
 	_ = json.NewEncoder(w).Encode(v)
 }
