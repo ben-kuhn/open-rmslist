@@ -2,9 +2,10 @@
 // engine plus its itshfbc data) for platforms without package management,
 // such as macOS and Windows.
 //
-// This is strictly opt-in: the caller supplies a URL (and optionally a
-// SHA-256). Downloading and executing a third-party binary is a trust
-// decision, so nothing is fetched unless explicitly configured.
+// Desktop builds call Fetch with the published release bundle by default; web
+// and server builds stay opt-in. Every bundled download is verified against a
+// SHA-256 sidecar fetched from the same release, and nothing is executed until
+// the archive has been extracted into a private cache directory.
 package voacapget
 
 import (
@@ -24,6 +25,53 @@ import (
 	"strings"
 	"time"
 )
+
+// DefaultURL returns the release bundle URL for the current platform. The
+// release workflow publishes voacap-<os>-<arch>.tar.gz (or .zip on Windows)
+// plus a .sha256 sidecar alongside the desktop artifacts.
+func DefaultURL() string {
+	osName := runtime.GOOS
+	if osName == "darwin" {
+		osName = "macos"
+	}
+	ext := ".tar.gz"
+	if osName == "windows" {
+		ext = ".zip"
+	}
+	return fmt.Sprintf("https://github.com/ben-kuhn/rms-radar/releases/latest/download/voacap-%s-%s%s", osName, runtime.GOARCH, ext)
+}
+
+// RemoteSHA256 fetches a .sha256 sidecar and returns its digest.
+func RemoteSHA256(ctx context.Context, url string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := downloadClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("checksum %s: HTTP %s", url, resp.Status)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if err != nil {
+		return "", err
+	}
+	fields := strings.Fields(string(b))
+	if len(fields) == 0 {
+		return "", fmt.Errorf("checksum %s: empty file", url)
+	}
+	sum := strings.ToLower(fields[0])
+	if len(sum) != 64 {
+		return "", fmt.Errorf("checksum %s: invalid digest %q", url, sum)
+	}
+	if _, err := hex.DecodeString(sum); err != nil {
+		return "", fmt.Errorf("checksum %s: invalid digest %q", url, sum)
+	}
+	return sum, nil
+}
 
 const (
 	maxDownloadBytes  = 512 << 20 // compressed archive cap

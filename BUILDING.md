@@ -65,6 +65,10 @@ BASE_URL=http://localhost:8079 npx playwright test
   plus sha256 checksums (`dist/`).
 - `scripts/build-desktop.sh` — native desktop artifact for the current OS:
   macOS `.app` zip, Windows `.exe` zip, Linux tarball + `.desktop` (`dist-desktop/`).
+- `scripts/build-voacap.sh` — self-contained VOACAP engine bundle for the
+  current Linux/macOS host (`dist-voacap/`); the release workflow also assembles
+  the Windows bundle from the upstream distribution. Desktop builds download
+  these bundles on first launch.
 - `scripts/build-deb.sh <binary> <package> <version> <arch> <web|desktop>` —
   builds a `.deb` from a prebuilt binary.
 - `packaging/arch/PKGBUILD` — Arch package (web/server).
@@ -76,8 +80,9 @@ BASE_URL=http://localhost:8079 npx playwright test
 - `contrib/desktop/*.desktop` — desktop launchers.
 
 The `v*` tag release workflow builds the web artifacts on Ubuntu, the native
-desktop artifacts on Linux/macOS/Windows runners, the Linux packages, and then
-publishes everything with a combined `SHA256SUMS`.
+desktop artifacts on Linux/macOS/Windows runners, the self-contained VOACAP
+engine bundles for Linux/macOS/Windows, the Linux packages, and then publishes
+everything with a combined `SHA256SUMS`.
 
 ## CI/CD
 
@@ -101,7 +106,8 @@ publishes everything with a combined `SHA256SUMS`.
 - `internal/catalog` — normalization, bands, service-code labels.
 - `internal/propagation` — heuristic and VOACAP ranking, LQI, groundwave floor.
 - `internal/server` — HTTP handlers, security headers, tile proxy, desktop lifecycle.
-- `internal/voacapget` — optional VOACAP distribution downloader.
+- `internal/voacapget` — checksum-verified VOACAP distribution downloader used by
+  the desktop first-run setup.
 - `web/` — vanilla JS + vendored Leaflet UI, client/gateway guides.
 - `packaging/`, `contrib/`, `scripts/` — distro packaging and release tooling.
 

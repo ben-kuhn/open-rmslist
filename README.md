@@ -88,10 +88,15 @@ list and map tiles are cached, so previously viewed areas work offline.
 - **Runs natively** on macOS, Windows, and Linux, or in any browser when
   self-hosted.
 
-### Better HF predictions (optional)
+### Better HF predictions
 
-RMS Radar always gives a built-in estimate. For full point-to-point VOACAP
-forecasts, install the engine and restart — RMS Radar finds it automatically:
+RMS Radar always gives a built-in estimate. The desktop app goes further: on
+first launch it downloads the matching VOACAP engine automatically (a few MB,
+once) and uses it for full point-to-point forecasts — no setup, no package
+manager.
+
+If you prefer to manage the engine yourself, or you are offline, install one of
+these and RMS Radar will use it instead:
 
 - **macOS:** `brew install la5nta/tap/voacapl`
 - **Debian/Ubuntu:** `sudo apt install voacapl voacapl-data`
@@ -102,8 +107,9 @@ forecasts, install the engine and restart — RMS Radar finds it automatically:
 - **NixOS:** use the `voacapl` package from
   [`nix-ham-packages`](https://github.com/ben-kuhn/nix-ham-packages)
 
-The desktop app auto-detects these installs; self-hosters can also point at a
-remote API or a custom binary. See [SELF-HOSTING.md](SELF-HOSTING.md).
+The desktop app checks for these installs before downloading anything.
+Self-hosters can also point at a remote API or a custom binary. See
+[SELF-HOSTING.md](SELF-HOSTING.md).
 
 ## Guides
 

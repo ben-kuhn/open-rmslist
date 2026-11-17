@@ -98,6 +98,27 @@ func (p *voacapLocal) Predict(ctx context.Context, params Params) (*Prediction, 
 
 	cmd := exec.CommandContext(ctx, p.executable, args...)
 	cmd.Dir = runDir
+	// Bundled engines ship their gfortran runtime next to the executable.
+	if libDir := filepath.Join(filepath.Dir(p.executable), "lib"); runtime.GOOS != "windows" && dirExists(libDir) {
+		key := "LD_LIBRARY_PATH"
+		if runtime.GOOS == "darwin" {
+			key = "DYLD_LIBRARY_PATH"
+		}
+		prefix := key + "="
+		env := os.Environ()
+		clean := make([]string, 0, len(env)+1)
+		value := libDir
+		for _, e := range env {
+			if strings.HasPrefix(e, prefix) {
+				if old := strings.TrimPrefix(e, prefix); old != "" {
+					value = libDir + string(os.PathListSeparator) + old
+				}
+				continue
+			}
+			clean = append(clean, e)
+		}
+		cmd.Env = append(clean, prefix+value)
+	}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("voacap failed: %w\n%s", err, out)
 	}
@@ -297,17 +318,24 @@ func computeLQI(out *voacap.VoacapOutput, freqMHz float64) (int, float64, float6
 		}
 	}
 
-	// Takeoff-angle factor (penalizes very low angles).
+	// Takeoff-angle factor (penalizes wide angles; very low angles are good).
 	const (
 		LowAngleThreshold = 30.0
 		MaxAnglePenalty   = 0.5
 	)
 	angleFactor := 0.0
-	if band.Tangle >= MinTakeoffAngle && band.Tangle <= 90.0 {
-		if band.Tangle >= LowAngleThreshold {
+	if band.Tangle > 0 && band.Tangle <= 90.0 {
+		tangle := band.Tangle
+		if tangle < MinTakeoffAngle {
+			// VOACAP can report an angle below the requested minimum; a lower
+			// angle is not a failure, so score it at the requested minimum
+			// instead of zeroing the whole prediction.
+			tangle = MinTakeoffAngle
+		}
+		if tangle >= LowAngleThreshold {
 			angleFactor = 1.0
 		} else {
-			norm := (band.Tangle - MinTakeoffAngle) / (LowAngleThreshold - MinTakeoffAngle)
+			norm := (tangle - MinTakeoffAngle) / (LowAngleThreshold - MinTakeoffAngle)
 			angleFactor = MaxAnglePenalty + norm*(1.0-MaxAnglePenalty)
 		}
 	}
@@ -435,6 +463,11 @@ func defaultDataDir(executable string) string {
 		}
 	}
 	return ""
+}
+
+func dirExists(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
 }
 
 // Detect locates a VOACAP engine in the standard installation locations for

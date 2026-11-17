@@ -103,6 +103,7 @@ endpoints are token-guarded and disabled in `-d` service mode.
 | `-voacap-download-url` | `RMSRADAR_VOACAP_DOWNLOAD_URL` | *(empty)* | Download a VOACAP distribution (binary + data) from this URL |
 | `-voacap-download-dir` | `RMSRADAR_VOACAP_DOWNLOAD_DIR` | *user cache* | Extract directory for the downloaded VOACAP distribution |
 | `-voacap-download-sha256` | `RMSRADAR_VOACAP_DOWNLOAD_SHA256` | *(empty)* | Optional SHA-256 of the distribution archive |
+| `-voacap-auto` | `RMSRADAR_VOACAP_AUTO` | `false` (desktop: `true`) | Download the published RMS Radar VOACAP bundle when no engine is installed |
 | `-web-dir` | `RMSRADAR_WEB_DIR` | *(embedded)* | Serve web assets from a directory instead |
 | `-tile-url` | `RMSRADAR_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Upstream tile template; proxied and disk-cached by the server |
 | `-tile-cache-max` | `RMSRADAR_TILE_CACHE_MAX_MB` | `512` | Tile cache quota in MiB; oldest tiles are evicted when exceeded |
@@ -210,13 +211,33 @@ custom engine explicitly:
 non-standard; on Linux it auto-detects a read-only data directory (voacapl runs
 with `--run-dir`).
 
-### Auto-downloading VOACAP (macOS / Windows)
+### Automatic VOACAP setup (desktop)
 
-On platforms without a package manager, RMS Radar can fetch and extract a VOACAP
-distribution for you:
+The `rms-radar-desktop` app is designed for zero-configuration use. If no engine
+is installed, it downloads the bundle for its platform from the latest RMS Radar
+release, verifies the published SHA-256 sidecar, extracts it into
+`-voacap-download-dir` (by default the user cache, e.g.
+`~/.cache/rms-radar/voacap`), and starts with forecasts enabled. This happens
+once, on first launch; subsequent launches reuse the verified install. The whole
+archive is a few MB.
+
+The checksum is mandatory: if it cannot be fetched or verified, the download is
+discarded and the app continues with the built-in estimator. Set
+`-voacap-auto=false` (or `RMSRADAR_VOACAP_AUTO=false`) to opt out, for example
+on a metered or offline connection.
+
+Self-hosted web/server builds default to auto-download **off**. Enable it with
+`-voacap-auto` if the host can reach GitHub and you want the same behavior:
 
 ```bash
-./rms-radar -voacap-download-url https://example.com/voacap-macos.tar.gz
+./rms-radar -voacap-auto
+```
+
+To use your own distribution instead of the published bundle:
+
+```bash
+./rms-radar -voacap-download-url https://example.com/voacap-macos.tar.gz \
+  -voacap-download-sha256 <sha256>
 ```
 
 Point `-voacap-download-url` at a `.zip`, `.tar.gz`, `.tgz`, or `.tar` containing
@@ -225,9 +246,10 @@ to `-voacap-download-dir`, the engine and data directory are located
 automatically, and the resulting paths are used. Supply `-voacap-download-sha256`
 to verify the archive before extracting.
 
-This is strictly opt-in (nothing downloads unless you set a URL), and
-downloading + executing a third-party binary is a trust decision you make by
-configuring it.
+Downloading and executing a third-party binary is a trust decision. The default
+bundle is built from the public-domain NTIA/ITS VOACAP engine, the CC0
+`voacapl` port, and freely redistributable coefficient data; the release
+workflow publishes its checksum next to it.
 
 ## API
 
@@ -269,11 +291,14 @@ authentication**. Treat it as a LAN/loopback service:
 - **Outbound only:** the service fetches the gateway list from `api.winlink.org`
   and propagation data from `prop.hamqsl.com` / `prop.kc2g.com`, over verified
   TLS. It makes no inbound connections.
-- **VOACAP auto-download (`-voacap-download-url`) executes a third-party
-  binary.** It is opt-in and off by default. Prefer your OS package manager; if
-  you use the downloader, supply `-voacap-download-sha256` and trust the source
-  you point it at. Archives are size-capped, and extraction rejects
-  path-traversal entries.
+- **VOACAP auto-download executes a third-party binary.** Desktop builds
+  download the project's published bundle on first launch and verify its
+  SHA-256 sidecar before extracting; web/server builds default to off and only
+  download when `-voacap-auto` or `-voacap-download-url` is set. Downloads use
+  HTTPS and are size-capped, and extraction rejects path-traversal entries.
+  Prefer your OS package manager if you want to audit the engine separately; a
+  failed verification leaves the previous install (or the built-in estimator)
+  in place.
 - **Privacy:** gateway data (including the sysop `Comments` field, which may
   contain contact details) is the same data Winlink publishes publicly. The
   embedded fallback snapshot is a frozen copy of that public feed.

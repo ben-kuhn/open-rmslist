@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -323,5 +324,53 @@ func TestFetchIncompleteArchiveKeepsOld(t *testing.T) {
 	}
 	if exe, data, err := Find(dest); err != nil || exe == "" || data == "" {
 		t.Fatalf("previous install was lost: %v", err)
+	}
+}
+
+func TestRemoteSHA256(t *testing.T) {
+	sum := strings.Repeat("a", 64)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(sum + "  dist.tar.gz\n"))
+	}))
+	defer srv.Close()
+
+	got, err := RemoteSHA256(context.Background(), srv.URL+"/dist.tar.gz.sha256")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != sum {
+		t.Fatalf("got %q want %q", got, sum)
+	}
+}
+
+func TestRemoteSHA256RejectsBadSidecar(t *testing.T) {
+	for _, body := range []string{"", "not-a-hash\n", strings.Repeat("z", 64)} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(body))
+		}))
+		if _, err := RemoteSHA256(context.Background(), srv.URL+"/x.sha256"); err == nil {
+			t.Errorf("RemoteSHA256(%q) succeeded, want error", body)
+		}
+		srv.Close()
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "missing", http.StatusNotFound)
+	}))
+	defer srv.Close()
+	if _, err := RemoteSHA256(context.Background(), srv.URL+"/x.sha256"); err == nil {
+		t.Error("404 sidecar accepted")
+	}
+}
+
+func TestDefaultURL(t *testing.T) {
+	url := DefaultURL()
+	if !strings.HasPrefix(url, "https://github.com/ben-kuhn/rms-radar/releases/latest/download/voacap-") {
+		t.Fatalf("unexpected URL: %q", url)
+	}
+	if runtime.GOOS == "windows" && !strings.HasSuffix(url, ".zip") {
+		t.Errorf("windows URL should be a zip: %q", url)
+	}
+	if runtime.GOOS != "windows" && !strings.HasSuffix(url, ".tar.gz") {
+		t.Errorf("unix URL should be a tarball: %q", url)
 	}
 }

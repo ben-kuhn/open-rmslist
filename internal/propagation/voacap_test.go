@@ -70,3 +70,28 @@ func TestParseOutputAndLQI(t *testing.T) {
 		t.Fatalf("unexpected SNR/REL: snr=%.1f rel=%.3f", snr, rel)
 	}
 }
+
+func TestComputeLQILowTakeoffAngle(t *testing.T) {
+	out := &voacap.VoacapOutput{
+		Request: voacap.Request{Hour: 20},
+		Predictions: []voacap.Prediction{{
+			Hour: 20,
+			BandPredictions: []voacap.BandPrediction{{
+				Freq:   14.1,
+				Mode:   "2F2",
+				Tangle: 1.6, // below the requested 3 degree minimum
+				MUFday: 0.82,
+				SDBW:   -128,
+				SNR:    35,
+				Rel:    0.76,
+			}},
+		}},
+	}
+	lqi, snr, rel, err := computeLQI(out, 14.102)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lqi <= 0 {
+		t.Fatalf("LQI = %d, want > 0 (SNR %.1f, rel %.2f)", lqi, snr, rel)
+	}
+}

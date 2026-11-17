@@ -34,6 +34,7 @@ func main() {
 		voacapDlURL  = flag.String("voacap-download-url", envOr("RMSRADAR_VOACAP_DOWNLOAD_URL", ""), "download a VOACAP distribution (binary + itshfbc data) from this URL (opt-in; no package manager required)")
 		voacapDlDir  = flag.String("voacap-download-dir", envOr("RMSRADAR_VOACAP_DOWNLOAD_DIR", defaultVOACAPDownloadDir()), "directory to extract a downloaded VOACAP distribution into")
 		voacapDlSum  = flag.String("voacap-download-sha256", envOr("RMSRADAR_VOACAP_DOWNLOAD_SHA256", ""), "optional SHA-256 of the VOACAP distribution archive")
+		voacapAuto   = flag.Bool("voacap-auto", envBool("RMSRADAR_VOACAP_AUTO", false), "automatically download the RMS Radar VOACAP bundle when no engine is installed")
 		webDir       = flag.String("web-dir", envOr("RMSRADAR_WEB_DIR", ""), "serve web assets from this directory instead of the embedded copy")
 		tileURL      = flag.String("tile-url", envOr("RMSRADAR_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"), "upstream tile URL template proxied+cached by the server (OSM by default)")
 		tileCacheMax = flag.Int("tile-cache-max", envInt("RMSRADAR_TILE_CACHE_MAX_MB", 512), "tile cache quota in MiB (set a very large value to disable eviction)")
@@ -63,6 +64,8 @@ func main() {
 		}
 	}
 
+	// Prefer an engine the user already installed; only fetch the published
+	// bundle when there is none.
 	if *voacapExec == "" {
 		if exe, data := propagation.Detect(); exe != "" {
 			*voacapExec = exe
@@ -70,6 +73,15 @@ func main() {
 				*voacapData = data
 			}
 			log.Printf("voacapl: detected %s (data %s)", exe, data)
+		}
+	}
+
+	// Optional: fetch the published bundle when enabled. The web binary defaults
+	// to off; desktop builds default to on.
+	if *voacapExec == "" && *voacapDlURL == "" && *voacapURL == "" {
+		if exe, data := maybeAutoDownloadVOACAP(*voacapAuto, *voacapDlDir); exe != "" {
+			*voacapExec = exe
+			*voacapData = data
 		}
 	}
 

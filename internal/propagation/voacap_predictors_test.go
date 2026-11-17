@@ -210,3 +210,28 @@ func TestVOACAPLocalPredict(t *testing.T) {
 		t.Errorf("Method = %q", pred.Method)
 	}
 }
+
+// TestVOACAPLocalRealEngine runs a real engine when the release workflow asks
+// for it. It is skipped in normal CI and locally.
+func TestVOACAPLocalRealEngine(t *testing.T) {
+	exe := os.Getenv("RMSRADAR_TEST_VOACAP_EXECUTABLE")
+	data := os.Getenv("RMSRADAR_TEST_VOACAP_DATA_DIR")
+	if exe == "" || data == "" {
+		t.Skip("set RMSRADAR_TEST_VOACAP_EXECUTABLE and RMSRADAR_TEST_VOACAP_DATA_DIR to run")
+	}
+	p, err := NewVOACAP(exe, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pred, err := p.Predict(context.Background(), testParams())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pred.Method != "voacap" {
+		t.Errorf("Method = %q", pred.Method)
+	}
+	if pred.LinkQuality < 0 || pred.LinkQuality > 100 {
+		t.Errorf("LinkQuality = %v", pred.LinkQuality)
+	}
+	t.Logf("VOACAP result: LQI=%d SNR=%.1f dB", pred.LinkQuality, pred.SNRdB)
+}
