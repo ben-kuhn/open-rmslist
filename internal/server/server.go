@@ -27,6 +27,7 @@ type Config struct {
 	VOACAPURL        string
 	VOACAPExecutable string
 	VOACAPDataDir    string
+	TileURL          string
 }
 
 // Server serves the web UI and JSON API.
@@ -105,7 +106,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("Content-Security-Policy",
 			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
-				"img-src 'self' https://*.basemaps.cartocdn.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org; "+
+				"img-src 'self' https:; "+
 				"connect-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
@@ -170,7 +171,16 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"service_codes": s.cfg.ServiceCodes,
 		"mode_swaps":    s.cfg.ModeSwaps,
 		"voacap":        s.voacapEnabled,
+		"tile_url":      tileURL(s.cfg.TileURL),
 	})
+}
+
+// tileURL returns the configured tile template, defaulting to keyless OSM.
+func tileURL(s string) string {
+	if s == "" {
+		return "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+	}
+	return s
 }
 
 // rankedEntry is one (station, channel) candidate in a ranked result.

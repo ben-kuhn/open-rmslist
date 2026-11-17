@@ -33,7 +33,7 @@ var webFS embed.FS
 func main() {
 	var (
 		addr         = flag.String("listen", envOr("OPENRMSLIST_LISTEN", "127.0.0.1:8079"), "HTTP listen address (use 0.0.0.0:8079 to serve the LAN)")
-		serviceCodes = flag.String("service-codes", envOr("OPENRMSLIST_SERVICE_CODES", "PUBLIC,MERCURY,VardeFM"), "comma-separated Winlink service codes to fetch")
+		serviceCodes = flag.String("service-codes", envOr("OPENRMSLIST_SERVICE_CODES", "PUBLIC,MERCURY"), "comma-separated Winlink service codes to fetch")
 		refresh      = flag.Duration("refresh", envDuration("OPENRMSLIST_REFRESH", 15*time.Minute), "gateway list refresh interval")
 		cacheDir     = flag.String("cache-dir", envOr("OPENRMSLIST_CACHE_DIR", "./data"), "cache directory for gateway list and propagation data")
 		accessKey    = flag.String("key", envOr("OPENRMSLIST_KEY", cmsapi.DefaultAccessKey), "Winlink CMS access key")
@@ -45,6 +45,7 @@ func main() {
 		voacapDlDir  = flag.String("voacap-download-dir", envOr("OPENRMSLIST_VOACAP_DOWNLOAD_DIR", defaultVOACAPDownloadDir()), "directory to extract a downloaded VOACAP distribution into")
 		voacapDlSum  = flag.String("voacap-download-sha256", envOr("OPENRMSLIST_VOACAP_DOWNLOAD_SHA256", ""), "optional SHA-256 of the VOACAP distribution archive")
 		webDir       = flag.String("web-dir", envOr("OPENRMSLIST_WEB_DIR", ""), "serve web assets from this directory instead of the embedded copy")
+		tileURL      = flag.String("tile-url", envOr("OPENRMSLIST_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"), "map tile URL template (OSM by default; point at a local tile server for offline use)")
 		openBrowser  = flag.Bool("open-browser", envBool("OPENRMSLIST_OPEN_BROWSER", defaultOpenBrowser()), "open the web UI in the default browser on start")
 	)
 	flag.Parse()
@@ -82,6 +83,7 @@ func main() {
 		VOACAPURL:        *voacapURL,
 		VOACAPExecutable: *voacapExec,
 		VOACAPDataDir:    *voacapData,
+		TileURL:          *tileURL,
 	}, webFSys, loader, heur)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

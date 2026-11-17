@@ -19,8 +19,18 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - name: go vet
         run: go vet ./...
-      - name: go test
-        run: go test ./...
+      - name: go test (with coverage)
+        run: go test -coverprofile=coverage.out ./...
+      - name: coverage floor
+        run: |
+          TOTAL=$(go tool cover -func=coverage.out | tail -1 | grep -oE '[0-9]+\.[0-9]+')
+          echo "total coverage: ${TOTAL}%"
+          awk -v t="$TOTAL" 'BEGIN { if (t+0 < 50) { print "::error::coverage " t "% is below the 50% floor"; exit 1 } }'
+      - name: upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
 
   build:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})

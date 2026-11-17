@@ -22,37 +22,26 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   try { localStorage.setItem("rmslist-theme", theme); } catch (_) {}
   $("theme-btn").textContent = theme === "dark" ? "☀" : "◐";
-  switchMapTiles(theme);
 }
 
 /* ---------- map ---------- */
-let map, markerLayer, rankLayer, darkTiles, lightTiles;
+let map, markerLayer, rankLayer, baseTiles;
+
+const DEFAULT_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 function initMap() {
   map = L.map("map", { zoomControl: true, worldCopyJump: true }).setView([20, 0], 2);
-
-  darkTiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    subdomains: "abcd",
-    maxZoom: 19,
-  });
-  lightTiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
-  });
-
   markerLayer = L.layerGroup().addTo(map);
   rankLayer = L.layerGroup().addTo(map);
-
-  switchMapTiles(state.theme);
 }
 
-function switchMapTiles(theme) {
+// Keyless OSM tiles; dark mode is a CSS filter on the tile pane (see style.css).
+function applyTileLayer() {
   if (!map) return;
-  const want = theme === "dark" ? darkTiles : lightTiles;
-  const other = theme === "dark" ? lightTiles : darkTiles;
-  if (!map.hasLayer(want)) want.addTo(map);
-  if (map.hasLayer(other)) map.removeLayer(other);
+  const url = (state.config && state.config.tile_url) || DEFAULT_TILES;
+  if (baseTiles) map.removeLayer(baseTiles);
+  baseTiles = L.tileLayer(url, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map);
 }
 
 /* ---------- helpers ---------- */
@@ -104,6 +93,7 @@ async function load() {
   state.stations = gateways || [];
   state.conditions = conditions;
 
+  applyTileLayer();
   $("status").textContent =
     `${state.stations.length} gateways · ` + (conditions ? "conditions ready" : "no conditions");
   populateServiceCodes();
@@ -121,7 +111,9 @@ function populateServiceCodes() {
   sel.appendChild(all);
 
   const counts = new Map(state.serviceCodes.map((s) => [s.code, s.count]));
-  const codes = new Set((state.config.service_codes || []).concat([...counts.keys()]));
+  // Only offer codes that actually appear in the gateway list, so an
+  // opt-in code (e.g. MERCURY) shows up only once nodes use it.
+  const codes = new Set(counts.keys());
   for (const code of codes) {
     const opt = document.createElement("option");
     opt.value = code;

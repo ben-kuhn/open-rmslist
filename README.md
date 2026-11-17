@@ -62,7 +62,7 @@ open <http://localhost:8079> yourself (or pass `-open-browser`).
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
 | `-listen` | `OPENRMSLIST_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
-| `-service-codes` | `OPENRMSLIST_SERVICE_CODES` | `PUBLIC,MERCURY,VardeFM` | Comma-separated service codes to fetch |
+| `-service-codes` | `OPENRMSLIST_SERVICE_CODES` | `PUBLIC,MERCURY` | Comma-separated service codes to fetch |
 | `-refresh` | `OPENRMSLIST_REFRESH` | `15m` | Gateway list refresh interval |
 | `-cache-dir` | `OPENRMSLIST_CACHE_DIR` | `./data` | Cache directory |
 | `-key` | `OPENRMSLIST_KEY` | Pat's community key | Winlink CMS access key |
@@ -74,6 +74,7 @@ open <http://localhost:8079> yourself (or pass `-open-browser`).
 | `-voacap-download-dir` | `OPENRMSLIST_VOACAP_DOWNLOAD_DIR` | *user cache* | Extract directory for the downloaded VOACAP distribution |
 | `-voacap-download-sha256` | `OPENRMSLIST_VOACAP_DOWNLOAD_SHA256` | *(empty)* | Optional SHA-256 of the distribution archive |
 | `-web-dir` | `OPENRMSLIST_WEB_DIR` | *(embedded)* | Serve web assets from a directory instead |
+| `-tile-url` | `OPENRMSLIST_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tile template (OSM; point at a local tile server for offline use) |
 | `-open-browser` | `OPENRMSLIST_OPEN_BROWSER` | macOS/Windows: `true`, else `false` | Open the browser on start |
 
 ### Mode swaps
@@ -85,6 +86,10 @@ are:
 |--------------|------|
 | `MERCURY` | `VARA` / `VARA 500` / `VARA 2750` → `Mercury` (VARA FM is left alone) |
 | `VardeFM` | `VARA FM` / `VARA FM WIDE` → `VardeFM` |
+
+`MERCURY` is fetched by default. The `VardeFM` rule is inert until a `VardeFM`
+gateway actually exists — the service-code dropdown is populated from real
+gateway data, so add `VardeFM` to `-service-codes` once you see nodes using it.
 
 Extend `catalog.DefaultModeSwaps` in `internal/catalog/catalog.go` for other
 service codes.

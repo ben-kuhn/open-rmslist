@@ -219,6 +219,11 @@ select:focus, input:focus { outline: none; border-color: var(--accent); }
 .leaflet-control-attribution { background: var(--bg-panel); color: var(--text-dim); }
 .leaflet-control-attribution a { color: var(--accent); }
 
+/* Dark map: invert the keyless OSM raster instead of using a keyed basemap. */
+[data-theme="dark"] .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+}
+
 @media (max-width: 720px) {
   .panel { width: 100%; max-width: none; border-left: none; border-top: 1px solid var(--border); }
   .layout { flex-direction: column; }

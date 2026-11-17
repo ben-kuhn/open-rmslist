@@ -1,0 +1,30 @@
+name: Deployed smoke
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Base URL to test
+        default: https://openrmslist.ku0hn.radio
+
+jobs:
+  smoke:
+    name: Browser + API smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: install Playwright
+        working-directory: tests/e2e
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: run smoke test
+        working-directory: tests/e2e
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url || 'https://openrmslist.ku0hn.radio' }}
+        run: npx playwright test

@@ -5,6 +5,10 @@ data/
 /open-rmslist
 /dist/
 
+# Test artifacts
+tests/e2e/node_modules/
+coverage.out
+
 # OS/editor
 .DS_Store
 *.swp
