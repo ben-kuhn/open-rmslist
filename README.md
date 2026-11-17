@@ -14,8 +14,7 @@ stations by predicted link success using current propagation conditions.
   *VardeFM*, instead of the `VARA` / `VARA FM` they advertise as
 - **Propagation ranking** — pick your grid, band, and mode; stations are
   scored and highlighted by predicted link quality. While ranking, 0% VHF/UHF
-  paths are hidden as implausible (distance-based, not continent-based); HF
-  stations are kept regardless of score
+  paths are hidden as implausible. HF stations are kept regardless of score.
 - **Offline-tolerant** — caches the gateway list and propagation data, with an
   embedded snapshot fallback
 
