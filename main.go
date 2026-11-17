@@ -34,7 +34,7 @@ func main() {
 	var (
 		addr         = flag.String("listen", envOr("OPENRMSLIST_LISTEN", "127.0.0.1:8079"), "HTTP listen address (use 0.0.0.0:8079 to serve the LAN)")
 		serviceCodes = flag.String("service-codes", envOr("OPENRMSLIST_SERVICE_CODES", "PUBLIC,MERCURY"), "comma-separated Winlink service codes to fetch")
-		refresh      = flag.Duration("refresh", envDuration("OPENRMSLIST_REFRESH", 15*time.Minute), "gateway list refresh interval")
+		refresh      = flag.Duration("refresh", envDuration("OPENRMSLIST_REFRESH", 1*time.Hour), "gateway list refresh interval")
 		cacheDir     = flag.String("cache-dir", envOr("OPENRMSLIST_CACHE_DIR", "./data"), "cache directory for gateway list and propagation data")
 		accessKey    = flag.String("key", envOr("OPENRMSLIST_KEY", cmsapi.DefaultAccessKey), "Winlink CMS access key")
 		historyHours = flag.Int("history-hours", envInt("OPENRMSLIST_HISTORY_HOURS", 48), "hours of channel history to fetch (1-48)")

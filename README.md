@@ -63,7 +63,7 @@ open <http://localhost:8079> yourself (or pass `-open-browser`).
 |------|-----|---------|-------------|
 | `-listen` | `OPENRMSLIST_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
 | `-service-codes` | `OPENRMSLIST_SERVICE_CODES` | `PUBLIC,MERCURY` | Comma-separated service codes to fetch |
-| `-refresh` | `OPENRMSLIST_REFRESH` | `15m` | Gateway list refresh interval |
+| `-refresh` | `OPENRMSLIST_REFRESH` | `1h` | Gateway list refresh interval |
 | `-cache-dir` | `OPENRMSLIST_CACHE_DIR` | `./data` | Cache directory |
 | `-key` | `OPENRMSLIST_KEY` | Pat's community key | Winlink CMS access key |
 | `-history-hours` | `OPENRMSLIST_HISTORY_HOURS` | `48` | Channel history (1–48) |
@@ -209,8 +209,8 @@ Packaging included:
 3. Propagation conditions are cached too; ranking degrades to a
    distance/band-based estimate when no ionospheric data is available.
 
-Map tiles still require connectivity (or a local tile cache); the station data
-and list remain fully usable offline.
+Map tiles are proxied and cached to disk by the server (`<cache-dir>/tiles`),
+so previously viewed areas render offline; new areas require connectivity.
 
 ## Security & privacy
 

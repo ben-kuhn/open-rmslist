@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -322,5 +323,64 @@ func TestParseTilePath(t *testing.T) {
 	}
 	if _, _, _, ok := parseTilePath("/tiles/3/4/5/6.png"); ok {
 		t.Error("expected invalid for too many parts")
+	}
+}
+
+func TestRankVHFDistanceFilter(t *testing.T) {
+	mk := func(call string, lat, lon float64) catalog.Station {
+		return catalog.Station{
+			Callsign: call, Latitude: lat, Longitude: lon,
+			Channels: []catalog.Channel{{ServiceCode: "PUBLIC", Mode: "VARA FM", ModeFamily: "VARA FM", FrequencyHz: 145e6, Frequency: "145 MHz", Band: "2m", RadioRange: "10"}},
+		}
+	}
+	near := mk("NEAR", 44.0, -91.9) // ~1 km from EN43bx
+	far := mk("FAR", 0, 0)          // ~7000 km away
+	s := newTestServer(t, []catalog.Station{near, far})
+
+	rec := httptest.NewRecorder()
+	s.handleRank(rec, httptest.NewRequest(http.MethodPost, "/api/rank", bytes.NewBufferString(`{"grid":"EN43bx","band":"2m","mode":"VARA FM"}`)))
+	var out []rankedEntry
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	calls := map[string]bool{}
+	for _, e := range out {
+		calls[e.Callsign] = true
+	}
+	if !calls["NEAR"] {
+		t.Error("near VHF station should be included")
+	}
+	if calls["FAR"] {
+		t.Error("far/other-continent station must be filtered out on VHF")
+	}
+}
+
+func TestRankCapKeepsNearest(t *testing.T) {
+	var stations []catalog.Station
+	for i := 0; i < maxRankCandidates+100; i++ {
+		stations = append(stations, catalog.Station{
+			Callsign:  fmt.Sprintf("S%03d", i),
+			Latitude:  44 + float64(i)*0.01,
+			Longitude: -91.9,
+			Channels:  []catalog.Channel{{ServiceCode: "PUBLIC", Mode: "VARA", ModeFamily: "VARA", FrequencyHz: 7103000, Frequency: "7.103 MHz", Band: "40m"}},
+		})
+	}
+	s := newTestServer(t, stations)
+
+	rec := httptest.NewRecorder()
+	s.handleRank(rec, httptest.NewRequest(http.MethodPost, "/api/rank", bytes.NewBufferString(`{"grid":"EN43bx","band":"40m","mode":"VARA"}`)))
+	var out []rankedEntry
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	calls := map[string]bool{}
+	for _, e := range out {
+		calls[e.Callsign] = true
+	}
+	if !calls["S000"] {
+		t.Error("nearest station must survive the cap")
+	}
+	if calls[fmt.Sprintf("S%03d", maxRankCandidates+99)] {
+		t.Error("farthest station should have been truncated")
 	}
 }

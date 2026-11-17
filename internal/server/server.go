@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -400,11 +401,14 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 	ssn := s.heuristic.Conditions().Sunspots
 
 	type cand struct {
-		st catalog.Station
-		ch catalog.Channel
+		st   catalog.Station
+		ch   catalog.Channel
+		dist float64
 	}
 	var cands []cand
 	for _, st := range s.snapshotStations() {
+		to := propagation.Point{Lat: st.Latitude, Lon: st.Longitude}
+		d := propagation.DistanceKm(from, to)
 		for _, ch := range st.Channels {
 			if sc != "" && !strings.EqualFold(ch.ServiceCode, sc) {
 				continue
@@ -415,10 +419,18 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 			if mode != "" && !strings.EqualFold(ch.ModeFamily, mode) {
 				continue
 			}
-			cands = append(cands, cand{st: st, ch: ch})
+			// VHF/UHF is line-of-sight: drop gateways beyond a plausible range
+			// so 2m/70cm lists never include stations on another continent.
+			if ch.FrequencyHz >= 30e6 && d > vhfMaxRangeKm(parseRangeKm(ch.RadioRange)) {
+				continue
+			}
+			cands = append(cands, cand{st: st, ch: ch, dist: d})
 		}
 	}
 
+	// Keep the nearest candidates when capping. Truncating in callsign order
+	// used to drop the closest stations and keep arbitrary distant ones.
+	sort.Slice(cands, func(i, j int) bool { return cands[i].dist < cands[j].dist })
 	truncated := len(cands) > maxRankCandidates
 	if truncated {
 		cands = cands[:maxRankCandidates]
@@ -522,6 +534,18 @@ func parseRangeKm(s string) float64 {
 		return 0
 	}
 	return f * 1.60934
+}
+
+// vhfMaxRangeKm returns the plausible maximum distance for a VHF/UHF
+// (line-of-sight) path. A generous floor covers enhanced/tropo paths; the
+// ceiling keeps it from pulling in other continents.
+func vhfMaxRangeKm(advertisedKm float64) float64 {
+	const floor, ceiling = 300.0, 1000.0
+	limit := math.Max(floor, advertisedKm*1.5)
+	if limit > ceiling {
+		limit = ceiling
+	}
+	return limit
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
