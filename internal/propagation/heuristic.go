@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ben-kuhn/rms-radar/internal/atomicfile"
 )
 
 // maxSoundingAge bounds how old a cached condition/sounding may be before it is
@@ -454,14 +456,13 @@ func (h *Heuristic) saveCached(c Conditions, iono []Ionosonde) {
 	if h.cacheDir == "" {
 		return
 	}
-	if err := os.MkdirAll(h.cacheDir, 0o755); err != nil {
-		return
-	}
 	b, err := json.Marshal(conditionsFile{Conditions: c, Ionosondes: iono})
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(h.cachePath(), b, 0o644)
+	if err := atomicfile.Write(h.cachePath(), b, 0o644); err != nil {
+		log.Printf("conditions cache write: %v", err)
+	}
 }
 
 func (h *Heuristic) loadCached() (Conditions, []Ionosonde, error) {

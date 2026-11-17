@@ -96,6 +96,7 @@ endpoints are token-guarded and disabled in `-d` service mode.
 | `-refresh` | `RMSRADAR_REFRESH` | `1h` | Gateway list refresh interval |
 | `-cache-dir` | `RMSRADAR_CACHE_DIR` | `./data` | Cache directory |
 | `-key` | `RMSRADAR_KEY` | Pat's community key | Winlink CMS access key |
+| `-admin-token` | `RMSRADAR_ADMIN_TOKEN` | *(empty)* | Enables service-code changes and requires this value in the `X-RMS-Radar-Admin` header |
 | `-history-hours` | `RMSRADAR_HISTORY_HOURS` | `48` | Channel history (1–48) |
 | `-voacap-url` | `RMSRADAR_VOACAP_URL` | *(empty)* | Optional remote VOACAP API base URL (enables forecasts) |
 | `-voacap-executable` | `RMSRADAR_VOACAP_EXECUTABLE` | *(empty)* | Path to a local `voacapl`/`voacapw` binary (enables forecasts) |
@@ -137,10 +138,29 @@ codes to request. The default is the two documented public codes:
 | `DATA2G` | Data2G gateways (community) |
 | *other* | any community or private group code |
 
-The list is **runtime-configurable** — open **Service codes…** in the app to
-add or remove a code, or set `-service-codes` / the module option. New community
-codes do not require a new release; a code with no gateways simply contributes
-nothing, and the filter dropdown is built from the data.
+The list is **runtime-configurable** — in the native and browser desktop apps,
+open **Service codes…** to add or remove a code, or set `-service-codes` / the
+module option. New community codes do not require a new release; a code with no
+gateways simply contributes nothing, and the filter dropdown is built from the
+data.
+
+On a server/daemon, the editing endpoint is **disabled by default**. To enable
+it, set an admin token and enter the same token in the dialog (or send it from a
+script):
+
+```bash
+./rms-radar -d -admin-token "$ADMIN_TOKEN"
+
+curl -X POST http://127.0.0.1:8079/api/servicecodes/config \
+  -H 'Content-Type: application/json' \
+  -H "X-RMS-Radar-Admin: $ADMIN_TOKEN" \
+  -d '{"add":"DATA3G"}'
+```
+
+Requests must be JSON and same-origin; cross-site `text/plain` forms are
+rejected. Codes are limited to `A-Z`, `0-9`, and `_` (1–16 characters, at most
+32 codes). The cache file is named from a hash of the code list, never from the
+raw text.
 
 Add any private group code you are entitled to with
 `-service-codes PUBLIC,MYGROUP` (or `RMSRADAR_SERVICE_CODES`); codes with no
@@ -260,7 +280,8 @@ workflow publishes its checksum next to it.
 | `GET /api/servicecodes` | Distinct service codes present in the data |
 | `GET /api/conditions` | Current solar + MUF summary |
 | `POST /api/rank` | Ranked stations for a grid/band/mode |
-| `GET /api/config` | Service codes, version, VOACAP status, tile URL |
+| `GET /api/config` | Service codes, version, VOACAP status, tile URL, editing flag |
+| `POST /api/servicecodes/config` | Change the fetched codes (desktop same-origin, or `X-RMS-Radar-Admin` on a server) |
 
 ## Offline behavior
 
@@ -271,20 +292,24 @@ workflow publishes its checksum next to it.
    distance/band-based estimate when no ionospheric data is available.
 
 Map tiles are proxied and cached to disk by the server (`<cache-dir>/tiles`), so
-previously viewed areas render offline; new areas require connectivity.
+previously viewed areas render offline; new areas require connectivity. Tile
+requests have a per-client token-bucket limit (10/s, burst 20) in addition to the
+eight-request upstream concurrency cap; put heavier traffic behind a reverse
+proxy with its own limit.
 
 ## Security & privacy
 
-RMS Radar is designed as a single-user, self-hosted tool and has **no
+RMS Radar is designed as a single-user, self-hosted tool and has **no user
 authentication**. Treat it as a LAN/loopback service:
 
 - **Binds to `127.0.0.1:8079` by default.** Pass `-listen 0.0.0.0:8079` (and put
   it behind a reverse proxy or VPN) only if you intend to expose it.
-- **No auth, no cookies.** The data API is read-only; `/api/rank` only computes
-  predictions. It is still a compute endpoint, so it is capped (500 candidates
-  per request) and time-limited. The only state-changing endpoints are the
-  desktop lifecycle ones (`/api/desktop/*`); they require the random token from
-  the launch URL and are disabled in `-d` service mode.
+- **No user accounts, no cookies.** The data API is read-only; `/api/rank` only
+  computes predictions, capped at 500 candidates and time-limited. Service-code
+  editing is disabled in daemon mode unless `-admin-token` is set, requires the
+  token header and a same-origin JSON request, and is rate-limited. The desktop
+  lifecycle endpoints (`/api/desktop/*`) require the random token from the
+  launch URL and are disabled in `-d` service mode.
 - **Security headers** (CSP, `X-Content-Type-Options: nosniff`,
   `X-Frame-Options`, `Referrer-Policy`) are set on every response, and all
   third-party gateway data is HTML-escaped before rendering.
@@ -292,9 +317,11 @@ authentication**. Treat it as a LAN/loopback service:
   and propagation data from `prop.hamqsl.com` / `prop.kc2g.com`, over verified
   TLS. It makes no inbound connections.
 - **VOACAP auto-download executes a third-party binary.** Desktop builds
-  download the project's published bundle on first launch and verify its
-  SHA-256 sidecar before extracting; web/server builds default to off and only
-  download when `-voacap-auto` or `-voacap-download-url` is set. Downloads use
+  download the project's published bundle, pinned to the app version, and
+  verify both its SHA-256 and a minisign signature (public key embedded in the
+  app) before extracting; web/server builds default to off and only download
+  when `-voacap-auto` or `-voacap-download-url` is set. The release workflow
+  pins the upstream VOACAP source and Windows archive hashes. Downloads use
   HTTPS and are size-capped, and extraction rejects path-traversal entries.
   Prefer your OS package manager if you want to audit the engine separately; a
   failed verification leaves the previous install (or the built-in estimator)

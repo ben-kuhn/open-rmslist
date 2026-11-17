@@ -89,9 +89,14 @@
   <form method="dialog" class="codes-form">
     <h2>Service codes to fetch</h2>
     <p class="codes-hint">Winlink has no wildcard. Add the codes your group or community modems use; they are saved and refreshed immediately.</p>
+    <div id="codes-auth" class="codes-add" hidden>
+      <input id="code-admin-token" type="password" placeholder="Admin token" autocomplete="off" spellcheck="false">
+      <button id="code-admin-save" type="button" class="btn">Use token</button>
+    </div>
+    <p class="codes-hint" id="codes-auth-hint" hidden>This server requires the admin token configured with <code>-admin-token</code>.</p>
     <div id="codes-list" class="codes-list"></div>
     <div class="codes-add">
-      <input id="code-input" placeholder="MODEM73" maxlength="24" autocomplete="off" spellcheck="false">
+      <input id="code-input" placeholder="MODEM73" maxlength="16" autocomplete="off" spellcheck="false">
       <button id="code-add" type="button" class="btn btn-primary">Add</button>
     </div>
     <p id="codes-status" class="codes-status"></p>

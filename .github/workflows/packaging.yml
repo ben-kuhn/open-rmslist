@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     container: fedora:latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: build RPM
         run: |
           dnf -y install golang rpm-build systemd-rpm-macros
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: build PKGBUILD
         run: |
           pacman -Sy --noconfirm --needed base-devel go
@@ -45,18 +45,18 @@ jobs:
           # the same name so makepkg uses it instead of downloading.
           tar -czf "packaging/arch/${PREFIX}.tar.gz" \
             --exclude=.git --transform "s,^\\./,${PREFIX}/," .
+          # Validate the local tarball instead of bypassing checksums.
+          SHA="$(sha256sum "packaging/arch/${PREFIX}.tar.gz" | awk '{print $1}')"
+          sed -i "s/^sha256sums=.*/sha256sums=('${SHA}')/" packaging/arch/PKGBUILD
           chown -R builder:builder .
-          # CI builds a local tarball from the current commit, so the pinned
-          # release sha256 won't match; skip checksum validation here (it is
-          # enforced when packaging a real release).
-          su builder -c "cd $GITHUB_WORKSPACE/packaging/arch && makepkg --noconfirm --skipchecksums"
+          su builder -c "cd $GITHUB_WORKSPACE/packaging/arch && makepkg --noconfirm"
 
   nix:
     name: Nix (buildGoModule)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: cachix/install-nix-action@v27
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: cachix/install-nix-action@ba0dd844c9180cbf77aa72a116d6fbc515d0e87b # v27
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - name: checkout nix-ham-packages

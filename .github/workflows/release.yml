@@ -5,31 +5,37 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
     name: Verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
       - name: go vet
         run: go vet ./...
-      - name: go test
-        run: go test ./...
+      - name: go test (race)
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
 
   web:
     name: Web/server artifacts
     needs: verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
       - name: build + package
@@ -50,7 +56,7 @@ jobs:
             [ -f "$bin" ] || { echo "missing $bin" >&2; exit 1; }
             OUT=dist ./scripts/build-deb.sh "$bin" rms-radar "$VER" "$debarch" web
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: web
           path: dist/*
@@ -64,10 +70,10 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
       - name: install Linux webview dependencies
@@ -98,7 +104,7 @@ jobs:
           bin="dist-desktop/rms-radar-desktop-${VER}-linux-amd64"
           [ -f "$bin" ] || { echo "missing $bin" >&2; exit 1; }
           OUT=dist-desktop ./scripts/build-deb.sh "$bin" rms-radar-desktop "$VER" amd64 desktop
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-${{ matrix.os }}
           path: dist-desktop/*
@@ -109,7 +115,7 @@ jobs:
     runs-on: ubuntu-latest
     container: fedora:latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: build RPM
         run: |
           dnf -y install golang rpm-build systemd-rpm-macros
@@ -122,7 +128,7 @@ jobs:
           rpmbuild -ba packaging/rpm/rms-radar.spec
           mkdir -p dist-rpm
           cp "$HOME/rpmbuild/RPMS"/*/*.rpm dist-rpm/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: rpm
           path: dist-rpm/*
@@ -133,16 +139,23 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: build Arch package
         run: |
-          pacman -Sy --noconfirm --needed base-devel go
+          pacman -Sy --noconfirm --needed base-devel go curl
           useradd -m builder
           chown -R builder:builder .
-          su builder -c "cd $GITHUB_WORKSPACE/packaging/arch && makepkg --noconfirm --skipchecksums"
+          VER="${GITHUB_REF_NAME#v}"
+          # Verify the tagged source tarball instead of bypassing checksums.
+          curl -fsSL -o "$GITHUB_WORKSPACE/packaging/arch/rms-radar-${VER}.tar.gz" \
+            "https://github.com/ben-kuhn/rms-radar/archive/refs/tags/v${VER}.tar.gz"
+          SHA="$(sha256sum "$GITHUB_WORKSPACE/packaging/arch/rms-radar-${VER}.tar.gz" | awk '{print $1}')"
+          sed -i "s/^sha256sums=.*/sha256sums=('${SHA}')/" "$GITHUB_WORKSPACE/packaging/arch/PKGBUILD"
+          chown -R builder:builder .
+          su builder -c "cd $GITHUB_WORKSPACE/packaging/arch && makepkg --noconfirm"
           mkdir -p dist-arch
           cp packaging/arch/*.pkg.tar.zst dist-arch/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: arch
           path: dist-arch/*
@@ -152,8 +165,8 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
       - name: install gfortran
@@ -166,7 +179,7 @@ jobs:
           GOOS: linux
           GOARCH: amd64
         run: ./scripts/build-voacap.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: voacap-linux
           path: dist-voacap/*
@@ -176,8 +189,8 @@ jobs:
     needs: verify
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
       - name: install gfortran
@@ -188,7 +201,7 @@ jobs:
           GOOS: darwin
           GOARCH: arm64
         run: ./scripts/build-voacap.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: voacap-macos
           path: dist-voacap/*
@@ -198,8 +211,8 @@ jobs:
     needs: verify
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
       - name: assemble bundle
@@ -210,6 +223,9 @@ jobs:
           New-Item -ItemType Directory -Force work | Out-Null
           # Upstream's official Windows distribution (engine, data, runtime DLL).
           Invoke-WebRequest -Uri "https://greg-hand.com/versions/itshfbc%20.zap" -OutFile "work/itshfbc.zip"
+          $expected = "29d3902c695523841dae395db937cda4f154a9e2cbe9aed38f38bd1f98d42e9a"
+          $actual = (Get-FileHash "work/itshfbc.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) { throw "upstream VOACAP archive SHA-256 mismatch: got $actual" }
           Expand-Archive -Path "work/itshfbc.zip" -DestinationPath "work/win"
           if (-not (Test-Path "work/win/itshfbc/bin_win/voacapw.exe")) { throw "voacapw.exe missing from upstream archive" }
           if (-not (Test-Path "work/win/itshfbc/bin_win/SALFLIBC.DLL")) { throw "SALFLIBC.DLL missing from upstream archive" }
@@ -222,27 +238,68 @@ jobs:
           RMSRADAR_TEST_VOACAP_EXECUTABLE: ${{ github.workspace }}\work\win\itshfbc\bin_win\voacapw.exe
           RMSRADAR_TEST_VOACAP_DATA_DIR: ${{ github.workspace }}\work\win\itshfbc
         run: go test ./internal/propagation -run TestVOACAPLocalRealEngine -v -count=1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: voacap-windows
           path: dist-voacap/*
 
-  publish:
-    name: Publish release
-    needs: [web, desktop, rpm, arch, voacap-linux, voacap-macos, voacap-windows]
+  sign:
+    name: Sign VOACAP bundles
+    needs: [voacap-linux, voacap-macos, voacap-windows]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: "voacap-*"
+          path: unsigned
+          merge-multiple: true
+      - name: install minisign
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y minisign
+      - name: sign bundles
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.VOACAP_MINISIGN_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$MINISIGN_SECRET_KEY" || { echo "VOACAP_MINISIGN_SECRET_KEY is not configured" >&2; exit 1; }
+          mkdir -p signed/voacap
+          cp unsigned/* signed/voacap/
+          key="$RUNNER_TEMP/voacap.key"
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          chmod 600 "$key"
+          trap 'rm -f "$key"' EXIT
+          shopt -s nullglob
+          for f in signed/voacap/voacap-*.tar.gz signed/voacap/voacap-*.zip; do
+            minisign -S -s "$key" -m "$f" -x "$f.minisig" -c "RMS Radar VOACAP bundle"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: voacap-signed
+          path: signed/voacap/*
+
+  publish:
+    name: Publish release
+    needs: [web, desktop, rpm, arch, sign]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
+      - name: keep only the signed VOACAP artifacts
+        run: |
+          rm -rf artifacts/voacap-linux artifacts/voacap-macos artifacts/voacap-windows
       - name: combine checksums
         run: |
           find artifacts -name checksums.txt -delete
           (cd artifacts && find . -type f -print0 | sort -z | xargs -0 sha256sum \
             | sed -E 's#  \./[^/]+/#  #; s#  \./#  #') > SHA256SUMS
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             artifacts/**/*
             SHA256SUMS

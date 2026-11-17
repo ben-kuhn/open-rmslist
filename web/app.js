@@ -27,6 +27,10 @@ const MOBILE_QUERY = window.matchMedia("(max-width: 720px)");
 // Desktop (double-click) mode: main opens /?desktop=<token>.
 const DESKTOP_TOKEN = new URLSearchParams(location.search).get("desktop");
 
+// Admin token for service-code edits on a self-hosted server. Kept per-tab
+// only; never in localStorage or a URL.
+const ADMIN_TOKEN_KEY = "rmsradar-admin-token";
+
 const BAND_ORDER = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m","6m","2m","1.25m","70cm","33cm","23cm","HF","Other"];
 
 // VHF/UHF starts at 30 MHz (6 m and up). For these line-of-sight bands a 0%
@@ -128,6 +132,7 @@ async function load() {
   state.stations = gateways || [];
   state.conditions = conditions;
 
+  updateCodesAvailability();
   applyTileLayer();
   $("status").textContent =
     `${state.stations.length} gateways · ` + (conditions ? "conditions ready" : "no conditions");
@@ -555,6 +560,30 @@ function initDesktopSession() {
 }
 
 /* ---------- service-code configuration ---------- */
+function adminToken() {
+  try { return sessionStorage.getItem(ADMIN_TOKEN_KEY) || ""; } catch (_) { return ""; }
+}
+
+function setAdminToken(token) {
+  try {
+    if (token) sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
+    else sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+  } catch (_) {}
+}
+
+function updateCodesAvailability() {
+  const btn = $("codes-btn");
+  if (!btn) return;
+  btn.hidden = !state.config.service_codes_editable;
+  const auth = $("codes-auth");
+  const hint = $("codes-auth-hint");
+  const required = !!state.config.service_codes_token_required;
+  if (auth) auth.hidden = !required;
+  if (hint) hint.hidden = !required;
+  const input = $("code-admin-token");
+  if (required && input && !input.value) input.value = adminToken();
+}
+
 async function refreshCodesList() {
   const cfg = await fetchJSON("/api/servicecodes/config");
   const list = $("codes-list");
@@ -576,6 +605,7 @@ async function refreshCodesList() {
 
 async function openCodesDialog() {
   $("codes-status").textContent = "";
+  updateCodesAvailability();
   await refreshCodesList();
   const dlg = $("codes-dialog");
   if (typeof dlg.showModal === "function") dlg.showModal();
@@ -587,16 +617,21 @@ async function changeCodes(body) {
   const status = $("codes-status");
   status.textContent = "Updating and refreshing…";
   try {
+    const headers = { "Content-Type": "application/json" };
+    const token = adminToken();
+    if (token) headers["X-RMS-Radar-Admin"] = token;
     const res = await fetchJSON("/api/servicecodes/config", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
     });
-    status.textContent = res.warning || "Updated.";
+    status.textContent = res.warning || (res.refresh ? "Updated; refresh started." : "Updated.");
     await load();
     await refreshCodesList();
   } catch (err) {
-    status.textContent = "Update failed: " + err.message;
+    status.textContent = err.message.includes("403")
+      ? "Admin token required or invalid."
+      : "Update failed: " + err.message;
   }
 }
 
@@ -615,6 +650,21 @@ function initCodesDialog() {
     if (e.key === "Enter") {
       e.preventDefault();
       $("code-add").click();
+    }
+  });
+  const saveToken = () => {
+    const input = $("code-admin-token");
+    if (!input) return;
+    setAdminToken(input.value.trim());
+    $("codes-status").textContent = input.value.trim()
+      ? "Admin token saved for this tab."
+      : "Admin token cleared.";
+  };
+  $("code-admin-save").addEventListener("click", saveToken);
+  $("code-admin-token").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      saveToken();
     }
   });
 }

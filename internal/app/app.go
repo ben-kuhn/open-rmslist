@@ -41,6 +41,13 @@ type Config struct {
 	// DesktopToken enables the browser desktop lifecycle (web binary only). The
 	// native-window binary leaves it empty and quits when its window closes.
 	DesktopToken string
+
+	// DesktopMode enables same-origin service-code editing without an admin
+	// token. Server/daemon builds leave it false unless AdminToken is set.
+	DesktopMode bool
+	// AdminToken protects service-code changes with the X-RMS-Radar-Admin
+	// header. It also enables the endpoint in daemon mode.
+	AdminToken string
 }
 
 // App is a running instance.
@@ -60,6 +67,13 @@ func Start(parent context.Context, cfg Config) (*App, error) {
 	if cfg.Refresh <= 0 {
 		return nil, fmt.Errorf("refresh interval must be positive (got %s)", cfg.Refresh)
 	}
+	seedCodes, err := cmsapi.NormalizeServiceCodes(cfg.ServiceCodes)
+	if err != nil {
+		return nil, fmt.Errorf("service codes: %w", err)
+	}
+	if len(seedCodes) == 0 {
+		seedCodes = []string{"PUBLIC"}
+	}
 	ctx, cancel := context.WithCancel(parent)
 	a := &App{cancel: cancel, done: make(chan struct{})}
 
@@ -69,13 +83,11 @@ func Start(parent context.Context, cfg Config) (*App, error) {
 		tileCache = filepath.Join(cfg.CacheDir, "tiles")
 		serviceCodesPath = filepath.Join(cfg.CacheDir, "service_codes.json")
 	}
-	codes := serviceCodesFromDisk(serviceCodesPath, cfg.ServiceCodes)
+	codes := serviceCodesFromDisk(serviceCodesPath, seedCodes)
 	a.loader = cmsapi.NewLoader(cfg.CacheDir, codes, cfg.HistoryHours, cfg.AccessKey)
 	a.heur = propagation.NewHeuristic(cfg.CacheDir)
 	a.srv = server.New(server.Config{
 		Version:           cfg.Version,
-		ServiceCodes:      codes,
-		HistoryHours:      cfg.HistoryHours,
 		VOACAPURL:         cfg.VOACAPURL,
 		VOACAPExecutable:  cfg.VOACAPExecutable,
 		VOACAPDataDir:     cfg.VOACAPDataDir,
@@ -84,6 +96,8 @@ func Start(parent context.Context, cfg Config) (*App, error) {
 		TileCacheMaxBytes: cfg.TileCacheMaxBytes,
 		VHFMaxRangeKm:     cfg.VHFMaxRangeKm,
 		ServiceCodesPath:  serviceCodesPath,
+		AdminToken:        cfg.AdminToken,
+		DesktopMode:       cfg.DesktopMode,
 		DesktopToken:      cfg.DesktopToken,
 		OnQuit:            cancel,
 	}, cfg.WebFS, a.loader, a.heur)
@@ -159,10 +173,14 @@ func serviceCodesFromDisk(path string, fallback []string) []string {
 		return fallback
 	}
 	var codes []string
-	if json.Unmarshal(b, &codes) != nil || len(codes) == 0 {
+	if json.Unmarshal(b, &codes) != nil {
 		return fallback
 	}
-	return codes
+	normalized, err := cmsapi.NormalizeServiceCodes(codes)
+	if err != nil || len(normalized) == 0 {
+		return fallback
+	}
+	return normalized
 }
 
 // URL returns a browser-friendly base URL for the listener. A :0 listen

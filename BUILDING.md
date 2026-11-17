@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Go 1.23+** for the web/server binary. It has no CGo and no third-party
+- **Go 1.25+** for the web/server binary. It has no CGo and no third-party
   runtime dependencies.
 - **CGo + a platform webview runtime** for the native desktop binary:
   - Linux: `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `pkg-config`, a C/C++
@@ -67,8 +67,9 @@ BASE_URL=http://localhost:8079 npx playwright test
   macOS `.app` zip, Windows `.exe` zip, Linux tarball + `.desktop` (`dist-desktop/`).
 - `scripts/build-voacap.sh` — self-contained VOACAP engine bundle for the
   current Linux/macOS host (`dist-voacap/`); the release workflow also assembles
-  the Windows bundle from the upstream distribution. Desktop builds download
-  these bundles on first launch.
+  the Windows bundle from the pinned upstream distribution, then signs every
+  bundle with minisign. Desktop builds download and verify these bundles on
+  first launch.
 - `scripts/build-deb.sh <binary> <package> <version> <arch> <web|desktop>` —
   builds a `.deb` from a prebuilt binary.
 - `packaging/arch/PKGBUILD` — Arch package (web/server).
@@ -81,13 +82,16 @@ BASE_URL=http://localhost:8079 npx playwright test
 
 The `v*` tag release workflow builds the web artifacts on Ubuntu, the native
 desktop artifacts on Linux/macOS/Windows runners, the self-contained VOACAP
-engine bundles for Linux/macOS/Windows, the Linux packages, and then publishes
-everything with a combined `SHA256SUMS`.
+engine bundles for Linux/macOS/Windows, signs the bundles, then publishes
+everything with a combined `SHA256SUMS`. Signing requires the
+`VOACAP_MINISIGN_SECRET_KEY` Actions secret; the public key is embedded in
+`internal/voacapget`.
 
 ## CI/CD
 
-- `.github/workflows/ci.yml` — vet, test, cross-compile the web targets, and
-  build the desktop binary on Linux/macOS/Windows.
+- `.github/workflows/ci.yml` — vet, race tests, govulncheck, cross-compile the
+  web targets, build the desktop binary, and build/smoke-test the VOACAP
+  bundles on Linux/macOS/Windows.
 - `.github/workflows/packaging.yml` — build the Arch, RPM, and Nix packages on
   every push/PR.
 - `.github/workflows/release.yml` — on a `v*` tag: web + desktop + `.deb`/`.rpm`/
@@ -106,8 +110,8 @@ everything with a combined `SHA256SUMS`.
 - `internal/catalog` — normalization, bands, service-code labels.
 - `internal/propagation` — heuristic and VOACAP ranking, LQI, groundwave floor.
 - `internal/server` — HTTP handlers, security headers, tile proxy, desktop lifecycle.
-- `internal/voacapget` — checksum-verified VOACAP distribution downloader used by
-  the desktop first-run setup.
+- `internal/voacapget` — checksum- and minisign-verified VOACAP distribution
+  downloader used by the desktop first-run setup.
 - `web/` — vanilla JS + vendored Leaflet UI, client/gateway guides.
 - `packaging/`, `contrib/`, `scripts/` — distro packaging and release tooling.
 

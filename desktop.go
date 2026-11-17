@@ -15,8 +15,6 @@ import (
 
 	"github.com/ben-kuhn/rms-radar/internal/app"
 	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
-	"github.com/ben-kuhn/rms-radar/internal/propagation"
-	"github.com/ben-kuhn/rms-radar/internal/voacapget"
 	webview "github.com/webview/webview_go"
 )
 
@@ -37,6 +35,7 @@ func main() {
 		voacapDlURL  = flag.String("voacap-download-url", envOr("RMSRADAR_VOACAP_DOWNLOAD_URL", ""), "download a VOACAP distribution (binary + itshfbc data) from this URL (opt-in; no package manager required)")
 		voacapDlDir  = flag.String("voacap-download-dir", envOr("RMSRADAR_VOACAP_DOWNLOAD_DIR", defaultVOACAPDownloadDir()), "directory to extract a downloaded VOACAP distribution into")
 		voacapDlSum  = flag.String("voacap-download-sha256", envOr("RMSRADAR_VOACAP_DOWNLOAD_SHA256", ""), "optional SHA-256 of the VOACAP distribution archive")
+		adminToken   = flag.String("admin-token", envOr("RMSRADAR_ADMIN_TOKEN", ""), "admin token required in the X-RMS-Radar-Admin header to change service codes (also enables the endpoint in server mode)")
 		voacapAuto   = flag.Bool("voacap-auto", envBool("RMSRADAR_VOACAP_AUTO", true), "automatically download the RMS Radar VOACAP bundle when no engine is installed")
 		webDir       = flag.String("web-dir", envOr("RMSRADAR_WEB_DIR", ""), "serve web assets from this directory instead of the embedded copy")
 		tileURL      = flag.String("tile-url", envOr("RMSRADAR_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"), "upstream tile URL template proxied+cached by the server (OSM by default)")
@@ -56,39 +55,7 @@ func main() {
 	}
 
 	// Optional: bootstrap a VOACAP engine (macOS/Windows have no package manager).
-	if *voacapDlURL != "" && *voacapExec == "" {
-		dlCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		exe, dataDir, err := voacapget.Fetch(dlCtx, *voacapDlURL, *voacapDlDir, *voacapDlSum)
-		cancel()
-		if err != nil {
-			log.Printf("voacapl download failed: %v", err)
-		} else {
-			*voacapExec = exe
-			*voacapData = dataDir
-			log.Printf("voacapl ready: %s (data %s)", exe, dataDir)
-		}
-	}
-
-	// Prefer an engine the user already installed; only fetch the published
-	// bundle when there is none.
-	if *voacapExec == "" {
-		if exe, data := propagation.Detect(); exe != "" {
-			*voacapExec = exe
-			if *voacapData == "" {
-				*voacapData = data
-			}
-			log.Printf("voacapl: detected %s (data %s)", exe, data)
-		}
-	}
-
-	// First run: fetch the published VOACAP bundle so forecasts work without a
-	// package manager. Skipped when an engine, URL, or remote API is configured.
-	if *voacapExec == "" && *voacapDlURL == "" && *voacapURL == "" {
-		if exe, data := maybeAutoDownloadVOACAP(*voacapAuto, *voacapDlDir); exe != "" {
-			*voacapExec = exe
-			*voacapData = data
-		}
-	}
+	*voacapExec, *voacapData = initVOACAP(*voacapExec, *voacapData, *voacapDlURL, *voacapDlDir, *voacapDlSum, *voacapURL, version, *voacapAuto)
 
 	codes := splitCSV(*serviceCodes)
 	log.Printf("RMS Radar desktop %s | service codes: %v", version, codes)
@@ -116,6 +83,8 @@ func main() {
 		TileCacheMaxBytes: int64(*tileCacheMax) << 20,
 		VHFMaxRangeKm:     *vhfRange,
 		WebFS:             webFSys,
+		DesktopMode:       true,
+		AdminToken:        *adminToken,
 	})
 	if err != nil {
 		log.Fatalf("start: %v", err)

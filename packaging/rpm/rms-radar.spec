@@ -10,7 +10,7 @@
 # local build provides it.
 
 Name:           rms-radar
-Version:        0.2.3
+Version:        0.2.4
 Release:        1%{?dist}
 Summary:        Winlink RMS gateway map with service-code filtering and propagation ranking
 
@@ -71,6 +71,8 @@ install -Dm644 contrib/desktop/rms-radar.desktop %{buildroot}%{_datadir}/applica
 %systemd_postun rms-radar.service
 
 %changelog
+* Tue Nov 17 2026 RMS Radar contributors - 0.2.4-1
+- Harden service-code editing; sign VOACAP bundles; atomic caches
 * Tue Nov 17 2026 RMS Radar contributors - 0.2.3-1
 - Desktop auto-downloads a checksum-verified VOACAP engine
 * Tue Nov 17 2026 RMS Radar contributors - 0.2.2-1

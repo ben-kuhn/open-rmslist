@@ -13,6 +13,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="${VOACAP_VERSION:-0.7.7}"
+# SHA-256 of the upstream v0.7.7 tag tarball. Tags can move, so a changed
+# tarball fails the build instead of silently shipping different source.
+VOACAP_SHA256="${VOACAP_SHA256:-744ba977bb97394e3ba68fd53e82fc0d51ef1234023ebee89b4fe4bbc98c922c}"
 OUT="${OUT:-dist-voacap}"
 GOOS="${GOOS:-$(go env GOOS)}"
 GOARCH="${GOARCH:-$(go env GOARCH)}"
@@ -47,6 +50,15 @@ mkdir -p "$WORK/src" "$OUT"
 echo "==> building voacapl ${VERSION} for ${GOOS}/${GOARCH}"
 curl -fsSL "https://github.com/jawatson/voacapl/archive/refs/tags/v${VERSION}.tar.gz" \
   -o "$WORK/src.tar.gz"
+if command -v sha256sum >/dev/null 2>&1; then
+  got_sha="$(sha256sum "$WORK/src.tar.gz" | awk '{print $1}')"
+else
+  got_sha="$(shasum -a 256 "$WORK/src.tar.gz" | awk '{print $1}')"
+fi
+if [ "$got_sha" != "$VOACAP_SHA256" ]; then
+  echo "voacapl source SHA-256 mismatch: got $got_sha want $VOACAP_SHA256" >&2
+  exit 1
+fi
 tar -xzf "$WORK/src.tar.gz" -C "$WORK/src" --strip-components=1
 
 (

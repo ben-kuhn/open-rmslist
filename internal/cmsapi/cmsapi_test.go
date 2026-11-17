@@ -2,11 +2,13 @@ package cmsapi
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -14,8 +16,61 @@ func TestCachePath(t *testing.T) {
 	if got := NewLoader("/tmp/x", []string{"PUBLIC"}, 48, "").cachePath(); got != filepath.Join("/tmp/x", "gateway_status.json") {
 		t.Errorf("public cachePath = %q", got)
 	}
-	if got := NewLoader("/tmp/x", []string{"PUBLIC", "MERCURY"}, 48, "").cachePath(); got != filepath.Join("/tmp/x", "gateway_status-PUBLIC-MERCURY.json") {
+	l := NewLoader("/tmp/x", []string{"PUBLIC", "MERCURY"}, 48, "")
+	got := l.cachePath()
+	if filepath.Dir(got) != "/tmp/x" || !strings.HasPrefix(filepath.Base(got), "gateway_status-") {
 		t.Errorf("multi cachePath = %q", got)
+	}
+	if strings.Contains(got, "MERCURY") {
+		t.Errorf("cache path contains raw code: %q", got)
+	}
+}
+
+func TestCachePathTraversalSafe(t *testing.T) {
+	l := NewLoader("/tmp/x", []string{"PUBLIC"}, 48, "")
+	// Even if a caller bypasses SetServiceCodes, the filename is hashed.
+	l.codes = []string{"/../../../tmp/pwned", "PUBLIC"}
+	got := l.cachePath()
+	if filepath.Dir(got) != "/tmp/x" {
+		t.Fatalf("cache path escaped: %q", got)
+	}
+}
+
+func TestNormalizeServiceCodes(t *testing.T) {
+	got, err := NormalizeServiceCodes([]string{" public ", "MERCURY", "mercury", "", "DATA2G"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"DATA2G", "MERCURY", "PUBLIC"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+	for _, bad := range [][]string{
+		{"/../../../tmp/pwned"},
+		{"../../etc/passwd"},
+		{"bad code"},
+		{"ABCDEFGHIJKLMNOPQ"}, // 17 chars
+	} {
+		if _, err := NormalizeServiceCodes(bad); err == nil {
+			t.Errorf("accepted invalid code %q", bad)
+		}
+	}
+	tooMany := make([]string, MaxServiceCodes+1)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprintf("CODE%d", i)
+	}
+	if _, err := NormalizeServiceCodes(tooMany); err == nil {
+		t.Error("accepted too many codes")
+	}
+}
+
+func TestSetServiceCodesRejectsInvalid(t *testing.T) {
+	l := NewLoader(t.TempDir(), []string{"PUBLIC"}, 48, "")
+	if err := l.SetServiceCodes([]string{"../pwned"}); err == nil {
+		t.Fatal("invalid code accepted")
+	}
+	if got := l.ServiceCodes(); len(got) != 1 || got[0] != "PUBLIC" {
+		t.Fatalf("codes changed after rejection: %v", got)
 	}
 }
 

@@ -3,9 +3,10 @@
 // such as macOS and Windows.
 //
 // Desktop builds call Fetch with the published release bundle by default; web
-// and server builds stay opt-in. Every bundled download is verified against a
-// SHA-256 sidecar fetched from the same release, and nothing is executed until
-// the archive has been extracted into a private cache directory.
+// and server builds stay opt-in. Bundles are pinned to the app release and
+// verified against both a SHA-256 sidecar and a minisign signature whose public
+// key is embedded below. Nothing is executed until the archive has been
+// extracted into a private cache directory.
 package voacapget
 
 import (
@@ -21,15 +22,26 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/jedisct1/go-minisign"
 )
 
-// DefaultURL returns the release bundle URL for the current platform. The
-// release workflow publishes voacap-<os>-<arch>.tar.gz (or .zip on Windows)
-// plus a .sha256 sidecar alongside the desktop artifacts.
-func DefaultURL() string {
+// MinisignPublicKey is the public half of the key used by the release workflow
+// to sign VOACAP bundles. The matching private key is stored in the repository's
+// VOACAP_MINISIGN_SECRET_KEY Actions secret.
+const MinisignPublicKey = "RWQoKUnh2RVOrHnNGpIBq61ECRNk8+eL93Sn5dhdm2te75Zz7lOkUSZt"
+
+var releaseVersionRE = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+$`)
+
+// BundleURL returns the release bundle URL for this platform. A clean release
+// version pins the download to that release; development builds use the latest
+// release. Pinning prevents a newer release from silently replacing the engine
+// under an installed app.
+func BundleURL(version string) string {
 	osName := runtime.GOOS
 	if osName == "darwin" {
 		osName = "macos"
@@ -38,24 +50,45 @@ func DefaultURL() string {
 	if osName == "windows" {
 		ext = ".zip"
 	}
-	return fmt.Sprintf("https://github.com/ben-kuhn/rms-radar/releases/latest/download/voacap-%s-%s%s", osName, runtime.GOARCH, ext)
+	asset := fmt.Sprintf("voacap-%s-%s%s", osName, runtime.GOARCH, ext)
+	base := "https://github.com/ben-kuhn/rms-radar/releases/latest/download/"
+	if releaseVersionRE.MatchString(strings.TrimSpace(version)) {
+		tag := "v" + strings.TrimPrefix(strings.TrimSpace(version), "v")
+		base = "https://github.com/ben-kuhn/rms-radar/releases/download/" + tag + "/"
+	}
+	return base + asset
+}
+
+// DefaultURL returns the latest-release bundle URL for the current platform.
+func DefaultURL() string { return BundleURL("") }
+
+// RemoteFile fetches a small release sidecar (checksum or signature).
+func RemoteFile(ctx context.Context, url string, max int64) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := downloadClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s: HTTP %s", url, resp.Status)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > max {
+		return nil, fmt.Errorf("%s: response exceeds %d bytes", url, max)
+	}
+	return b, nil
 }
 
 // RemoteSHA256 fetches a .sha256 sidecar and returns its digest.
 func RemoteSHA256(ctx context.Context, url string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
-	resp, err := downloadClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("checksum %s: HTTP %s", url, resp.Status)
-	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	b, err := RemoteFile(ctx, url, 4096)
 	if err != nil {
 		return "", err
 	}
@@ -73,6 +106,27 @@ func RemoteSHA256(ctx context.Context, url string) (string, error) {
 	return sum, nil
 }
 
+// VerifyMinisign verifies data against a minisign signature using the embedded
+// release public key.
+func VerifyMinisign(data, signature []byte) error {
+	pk, err := minisign.NewPublicKey(MinisignPublicKey)
+	if err != nil {
+		return fmt.Errorf("minisign public key: %w", err)
+	}
+	sig, err := minisign.DecodeSignature(string(signature))
+	if err != nil {
+		return fmt.Errorf("minisign signature: %w", err)
+	}
+	ok, err := pk.Verify(data, sig)
+	if err != nil {
+		return fmt.Errorf("minisign verify: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("minisign signature does not match the bundle")
+	}
+	return nil
+}
+
 const (
 	maxDownloadBytes  = 512 << 20 // compressed archive cap
 	maxExtractedBytes = 256 << 20 // total uncompressed cap (zip-bomb guard)
@@ -82,12 +136,29 @@ const (
 // downloadClient has a bounded timeout so a hung server cannot stall startup.
 var downloadClient = &http.Client{Timeout: 120 * time.Second}
 
-// Fetch downloads the archive at url, optionally verifies its SHA-256, extracts
-// it into a staging directory, and atomically replaces destDir. An existing
-// installation is reused only when no checksum was requested or its recorded
-// checksum matches; a failed download/extract leaves the previous install
-// intact.
-func Fetch(ctx context.Context, url, destDir, wantSHA256 string) (string, string, error) {
+// Option customizes Fetch.
+type Option func(*fetchOptions)
+
+type fetchOptions struct {
+	signature []byte
+}
+
+// WithMinisignSignature verifies the downloaded archive with a minisign
+// signature before extracting it.
+func WithMinisignSignature(sig []byte) Option {
+	return func(o *fetchOptions) { o.signature = sig }
+}
+
+// Fetch downloads the archive at url, optionally verifies its SHA-256 and
+// minisign signature, extracts it into a staging directory, and atomically
+// replaces destDir. An existing installation is reused only when no checksum
+// was requested or its recorded checksum matches; a failed download/verify
+// leaves the previous install intact.
+func Fetch(ctx context.Context, url, destDir, wantSHA256 string, opts ...Option) (string, string, error) {
+	var fo fetchOptions
+	for _, opt := range opts {
+		opt(&fo)
+	}
 	if destDir == "" || destDir == "." || destDir == string(filepath.Separator) {
 		return "", "", fmt.Errorf("refusing to install into %q", destDir)
 	}
@@ -114,6 +185,15 @@ func Fetch(ctx context.Context, url, destDir, wantSHA256 string) (string, string
 
 	if wantSHA256 != "" {
 		if err := verifySHA256(tmp, wantSHA256); err != nil {
+			return "", "", err
+		}
+	}
+	if len(fo.signature) > 0 {
+		b, err := os.ReadFile(tmp)
+		if err != nil {
+			return "", "", err
+		}
+		if err := VerifyMinisign(b, fo.signature); err != nil {
 			return "", "", err
 		}
 	}
@@ -159,6 +239,20 @@ func markerMatches(destDir, want string) bool {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(string(b)), strings.TrimSpace(want))
+}
+
+// Installed returns an existing extracted installation and its recorded
+// checksum, if a complete build is present.
+func Installed(destDir string) (exe, data, sum string, ok bool) {
+	exe, data, err := Find(destDir)
+	if err != nil || exe == "" || data == "" {
+		return "", "", "", false
+	}
+	b, err := os.ReadFile(filepath.Join(destDir, ".voacap-sha256"))
+	if err != nil {
+		return "", "", "", false
+	}
+	return exe, data, strings.TrimSpace(string(b)), true
 }
 
 func download(ctx context.Context, url, destDir string) (string, error) {

@@ -10,8 +10,8 @@ jobs:
     name: Vet & test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
           cache: true
@@ -35,7 +35,7 @@ jobs:
           echo "total coverage: ${TOTAL}%"
           awk -v t="$TOTAL" 'BEGIN { if (t+0 < 50) { print "::error::coverage " t "% is below the 50% floor"; exit 1 } }'
       - name: upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage
           path: coverage.out
@@ -59,8 +59,8 @@ jobs:
           - { goos: openbsd, goarch: amd64, artos: openbsd }
           - { goos: netbsd,  goarch: amd64, artos: netbsd }
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
       - name: build
@@ -73,7 +73,7 @@ jobs:
           go build -trimpath -ldflags "-s -w" \
             -o "dist/rms-radar-web-${{ matrix.artos }}-${{ matrix.goarch }}" .
       - name: upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: rms-radar-web-${{ matrix.artos }}-${{ matrix.goarch }}
           path: dist/rms-radar-web-${{ matrix.artos }}-${{ matrix.goarch }}
@@ -83,11 +83,11 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24"
       - name: start the server
@@ -119,8 +119,8 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
       - name: install Linux webview dependencies
@@ -139,7 +139,7 @@ jobs:
       - name: build native desktop binary
         shell: bash
         run: ./scripts/build-desktop.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-${{ matrix.os }}
           path: dist-desktop/*
@@ -153,8 +153,8 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
       - name: install gfortran (Linux)
@@ -191,6 +191,9 @@ jobs:
           New-Item -ItemType Directory -Force dist-voacap | Out-Null
           New-Item -ItemType Directory -Force work | Out-Null
           Invoke-WebRequest -Uri "https://greg-hand.com/versions/itshfbc%20.zap" -OutFile "work/itshfbc.zip"
+          $expected = "29d3902c695523841dae395db937cda4f154a9e2cbe9aed38f38bd1f98d42e9a"
+          $actual = (Get-FileHash "work/itshfbc.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) { throw "upstream VOACAP archive SHA-256 mismatch: got $actual" }
           Expand-Archive -Path "work/itshfbc.zip" -DestinationPath "work/win"
           if (-not (Test-Path "work/win/itshfbc/bin_win/voacapw.exe")) { throw "voacapw.exe missing from upstream archive" }
           if (-not (Test-Path "work/win/itshfbc/bin_win/SALFLIBC.DLL")) { throw "SALFLIBC.DLL missing from upstream archive" }
@@ -204,7 +207,7 @@ jobs:
           RMSRADAR_TEST_VOACAP_EXECUTABLE: ${{ github.workspace }}\work\win\itshfbc\bin_win\voacapw.exe
           RMSRADAR_TEST_VOACAP_DATA_DIR: ${{ github.workspace }}\work\win\itshfbc
         run: go test ./internal/propagation -run TestVOACAPLocalRealEngine -v -count=1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: voacap-${{ matrix.os }}
           path: dist-voacap/*

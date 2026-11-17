@@ -3,20 +3,12 @@ package server
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"io/fs"
-	"log"
-	"math"
 	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,8 +21,6 @@ import (
 // Config configures the HTTP server.
 type Config struct {
 	Version           string
-	ServiceCodes      []string
-	HistoryHours      int
 	VOACAPURL         string
 	VOACAPExecutable  string
 	VOACAPDataDir     string
@@ -40,6 +30,12 @@ type Config struct {
 	VHFMaxRangeKm     float64
 	// ServiceCodesPath persists the runtime-configurable service-code list.
 	ServiceCodesPath string
+	// AdminToken, when set, is required in the X-RMS-Radar-Admin header to
+	// change service codes. It also enables the endpoint on server builds.
+	AdminToken string
+	// DesktopMode enables service-code editing from the same-origin UI without
+	// an admin token. It is set only by the native and browser desktop modes.
+	DesktopMode bool
 
 	// DesktopToken enables the desktop lifecycle endpoints. It is non-empty
 	// only when the app was launched in desktop (double-click) mode.
@@ -71,6 +67,8 @@ type Server struct {
 	// Global admission + tile cache state.
 	rankSem      chan struct{}
 	tileSem      chan struct{}
+	tileLimiter  *ipLimiter
+	rankClients  *clientGate
 	tileMu       sync.Mutex
 	tileInFlight map[string]chan struct{}
 	tileBytes    int64
@@ -79,6 +77,15 @@ type Server struct {
 
 	// refreshCodes reloads the gateway data after the service-code list changes.
 	refreshCodes func(context.Context) error
+
+	// Service-code endpoint admission: a global cooldown and a single-flight
+	// refresh prevent a burst of POSTs from piling up upstream fetches.
+	adminToken            string
+	desktopMode           bool
+	codeChangeMu          sync.Mutex
+	lastCodeChange        time.Time
+	codeChangeMinInterval time.Duration
+	codeRefreshSem        chan struct{}
 
 	// Desktop (double-click) lifecycle: the page checks in while it is open,
 	// and the process exits once every page has gone away.
@@ -118,8 +125,15 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 
 		rankSem:      make(chan struct{}, 2),
 		tileSem:      make(chan struct{}, 8),
+		tileLimiter:  newIPLimiter(10, 20),
+		rankClients:  newClientGate(),
 		tileInFlight: make(map[string]chan struct{}),
 		tileMaxBytes: cfg.TileCacheMaxBytes,
+
+		adminToken:            cfg.AdminToken,
+		desktopMode:           cfg.DesktopMode,
+		codeChangeMinInterval: time.Second,
+		codeRefreshSem:        make(chan struct{}, 1),
 
 		desktopToken:   cfg.DesktopToken,
 		onQuit:         cfg.OnQuit,
@@ -308,676 +322,15 @@ func (s *Server) handleConditions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.heuristic.Conditions())
 }
 
-// handleServiceCodesConfig returns or updates the persisted list of service
-// codes to fetch. The Winlink API has no wildcard, so adding a code is how a
-// group publishes a new community modem without a new release.
-func (s *Server) handleServiceCodesConfig(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		writeJSON(w, map[string]any{"codes": s.loader.ServiceCodes()})
-	case http.MethodPost:
-		var req struct {
-			Codes  []string `json:"codes"`
-			Add    string   `json:"add"`
-			Remove string   `json:"remove"`
-		}
-		body := http.MaxBytesReader(w, r.Body, 1<<16)
-		if err := json.NewDecoder(body).Decode(&req); err != nil {
-			http.Error(w, "invalid JSON", http.StatusBadRequest)
-			return
-		}
-		next := s.loader.ServiceCodes()
-		if req.Codes != nil {
-			next = req.Codes
-		} else {
-			next = append(next, req.Add)
-			if req.Remove != "" {
-				filtered := next[:0]
-				for _, c := range next {
-					if !strings.EqualFold(c, req.Remove) {
-						filtered = append(filtered, c)
-					}
-				}
-				next = filtered
-			}
-		}
-		next = normalizeServiceCodes(next)
-		if len(next) == 0 {
-			http.Error(w, "at least one service code is required", http.StatusBadRequest)
-			return
-		}
-		if err := s.saveServiceCodes(next); err != nil {
-			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		s.loader.SetServiceCodes(next)
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		resp := map[string]any{"codes": next}
-		if s.refreshCodes != nil {
-			if err := s.refreshCodes(ctx); err != nil {
-				resp["warning"] = "saved, but refresh failed: " + err.Error()
-			}
-		}
-		writeJSON(w, resp)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func normalizeServiceCodes(codes []string) []string {
-	seen := make(map[string]bool, len(codes))
-	out := make([]string, 0, len(codes))
-	for _, c := range codes {
-		c = strings.ToUpper(strings.TrimSpace(c))
-		if c == "" || seen[c] {
-			continue
-		}
-		seen[c] = true
-		out = append(out, c)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func (s *Server) saveServiceCodes(codes []string) error {
-	if s.cfg.ServiceCodesPath == "" {
-		return nil
-	}
-	b, err := json.Marshal(codes)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(s.cfg.ServiceCodesPath), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(s.cfg.ServiceCodesPath, b, 0o644)
-}
-
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
-		"version":       s.cfg.Version,
-		"service_codes": s.loader.ServiceCodes(),
-		"voacap":        s.voacapEnabled,
-		"tile_url":      proxyTilePath,
+		"version":                      s.cfg.Version,
+		"service_codes":                s.loader.ServiceCodes(),
+		"service_codes_editable":       s.serviceCodeEditingEnabled(),
+		"service_codes_token_required": s.serviceCodeTokenRequired(),
+		"voacap":                       s.voacapEnabled,
+		"tile_url":                     proxyTilePath,
 	})
-}
-
-// ---- desktop (double-click) lifecycle ----
-//
-// In desktop mode main generates a random token and opens the browser at
-// /?desktop=<token>. The page registers, heartbeats, and sends a beacon when it
-// closes. When every registered page has gone away, the process exits. -d
-// (daemon) disables the token entirely, so servers never auto-exit.
-
-const (
-	desktopGrace     = 15 * time.Second // wait this long after the last page closes
-	desktopClientTTL = 2 * time.Minute  // drop pages that stop heartbeating
-)
-
-func (s *Server) desktopAuthorized(w http.ResponseWriter, r *http.Request) bool {
-	if s.desktopToken == "" {
-		http.NotFound(w, r)
-		return false
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return false
-	}
-	got := r.URL.Query().Get("token")
-	if subtle.ConstantTimeCompare([]byte(got), []byte(s.desktopToken)) != 1 {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return false
-	}
-	return true
-}
-
-func (s *Server) desktopTouch(id string) {
-	if id == "" {
-		return
-	}
-	s.desktopMu.Lock()
-	defer s.desktopMu.Unlock()
-	s.desktopClients[id] = time.Now()
-	s.desktopSeen = true
-	s.desktopEmptyAt = time.Time{}
-}
-
-func (s *Server) desktopRemove(id string) {
-	s.desktopMu.Lock()
-	defer s.desktopMu.Unlock()
-	delete(s.desktopClients, id)
-	if s.desktopSeen && len(s.desktopClients) == 0 && s.desktopEmptyAt.IsZero() {
-		s.desktopEmptyAt = time.Now()
-	}
-}
-
-func (s *Server) monitorDesktop() {
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		now := time.Now()
-		s.desktopMu.Lock()
-		for id, seen := range s.desktopClients {
-			if now.Sub(seen) > desktopClientTTL {
-				delete(s.desktopClients, id)
-			}
-		}
-		if s.desktopSeen && len(s.desktopClients) == 0 && s.desktopEmptyAt.IsZero() {
-			s.desktopEmptyAt = now
-		}
-		quit := s.desktopSeen && len(s.desktopClients) == 0 &&
-			!s.desktopEmptyAt.IsZero() && now.Sub(s.desktopEmptyAt) > desktopGrace
-		s.desktopMu.Unlock()
-		if quit {
-			if s.onQuit != nil {
-				s.onQuit()
-			}
-			return
-		}
-	}
-}
-
-func (s *Server) handleDesktopHello(w http.ResponseWriter, r *http.Request) {
-	if !s.desktopAuthorized(w, r) {
-		return
-	}
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		http.Error(w, "missing id", http.StatusBadRequest)
-		return
-	}
-	s.desktopTouch(id)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) handleDesktopBeat(w http.ResponseWriter, r *http.Request) {
-	if !s.desktopAuthorized(w, r) {
-		return
-	}
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		http.Error(w, "missing id", http.StatusBadRequest)
-		return
-	}
-	s.desktopTouch(id)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) handleDesktopBye(w http.ResponseWriter, r *http.Request) {
-	if !s.desktopAuthorized(w, r) {
-		return
-	}
-	s.desktopRemove(r.URL.Query().Get("id"))
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) handleDesktopQuit(w http.ResponseWriter, r *http.Request) {
-	if !s.desktopAuthorized(w, r) {
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-	if s.onQuit != nil {
-		go s.onQuit()
-	}
-}
-
-// proxyTilePath is the same-origin tile endpoint the browser uses; the server
-// proxies and caches tiles from the configured upstream.
-const proxyTilePath = "/tiles/{z}/{x}/{y}.png"
-
-// defaultTileUpstream is a keyless OSM tile template.
-const defaultTileUpstream = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-
-// handleTiles fetches a tile from the upstream once (with a proper
-// User-Agent), caches it on disk, and serves it. The browser never talks to the
-// tile server directly, which avoids browser-side 403s and lets previously
-// viewed areas work offline.
-func (s *Server) handleTiles(w http.ResponseWriter, r *http.Request) {
-	z, x, y, ok := parseTilePath(r.URL.Path)
-	if !ok || z < 0 || z > 19 {
-		http.Error(w, "invalid tile path", http.StatusBadRequest)
-		return
-	}
-	if n := 1 << z; x < 0 || x >= n || y < 0 || y >= n {
-		http.Error(w, "invalid tile coordinates", http.StatusBadRequest)
-		return
-	}
-
-	cachePath := filepath.Join(s.cfg.TileCacheDir, strconv.Itoa(z), strconv.Itoa(x), strconv.Itoa(y)+".png")
-	if b, err := os.ReadFile(cachePath); err == nil && len(b) > 0 {
-		serveTile(w, b)
-		return
-	}
-
-	// Coalesce concurrent misses for the same tile: one request fetches, the
-	// rest wait and read the cached result.
-	s.tileMu.Lock()
-	wait, busy := s.tileInFlight[cachePath]
-	if !busy {
-		wait = make(chan struct{})
-		s.tileInFlight[cachePath] = wait
-	}
-	s.tileMu.Unlock()
-	if busy {
-		select {
-		case <-wait:
-		case <-r.Context().Done():
-			http.Error(w, "request canceled", http.StatusRequestTimeout)
-			return
-		}
-		if b, err := os.ReadFile(cachePath); err == nil && len(b) > 0 {
-			serveTile(w, b)
-			return
-		}
-		http.Error(w, "tile upstream error", http.StatusBadGateway)
-		return
-	}
-	defer func() {
-		s.tileMu.Lock()
-		delete(s.tileInFlight, cachePath)
-		close(wait)
-		s.tileMu.Unlock()
-	}()
-
-	select {
-	case s.tileSem <- struct{}{}:
-		defer func() { <-s.tileSem }()
-	case <-r.Context().Done():
-		http.Error(w, "request canceled", http.StatusRequestTimeout)
-		return
-	}
-
-	upstream := s.cfg.TileURL
-	if upstream == "" {
-		upstream = defaultTileUpstream
-	}
-	u := strings.NewReplacer(
-		"{z}", strconv.Itoa(z),
-		"{x}", strconv.Itoa(x),
-		"{y}", strconv.Itoa(y),
-		"{s}", "a",
-		"{r}", "",
-	).Replace(upstream)
-
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
-	if err != nil {
-		http.Error(w, "tile upstream error", http.StatusBadGateway)
-		return
-	}
-	req.Header.Set("User-Agent", "rms-radar/"+s.cfg.Version+" (self-hosted Winlink RMS map)")
-	req.Header.Set("Accept", "image/png,image/*;q=0.8")
-	resp, err := s.tileClient.Do(req)
-	if err != nil {
-		http.Error(w, "tile upstream error", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		http.Error(w, "tile upstream error", http.StatusBadGateway)
-		return
-	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil || len(b) == 0 {
-		http.Error(w, "tile upstream error", http.StatusBadGateway)
-		return
-	}
-	if s.cfg.TileCacheDir != "" {
-		_ = os.MkdirAll(filepath.Dir(cachePath), 0o755)
-		if tmp, err := os.CreateTemp(filepath.Dir(cachePath), ".tile-*"); err == nil {
-			name := tmp.Name()
-			_, werr := tmp.Write(b)
-			cerr := tmp.Close()
-			if werr == nil && cerr == nil && os.Rename(name, cachePath) == nil {
-				s.tileCacheAdd(len(b))
-			} else {
-				_ = os.Remove(name)
-			}
-		}
-	}
-	serveTile(w, b)
-}
-
-// dirSize returns the total size of regular files under dir.
-func dirSize(dir string) int64 {
-	var total int64
-	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() {
-			total += info.Size()
-		}
-		return nil
-	})
-	return total
-}
-
-// tileCacheAdd accounts for a new tile and evicts oldest-first when the quota
-// is exceeded.
-func (s *Server) tileCacheAdd(n int) {
-	if s.cfg.TileCacheDir == "" || s.tileMaxBytes <= 0 {
-		return
-	}
-	s.tileMu.Lock()
-	s.tileBytes += int64(n)
-	over := s.tileBytes > s.tileMaxBytes
-	s.tileMu.Unlock()
-	if over {
-		s.evictTiles()
-	}
-}
-
-func (s *Server) evictTiles() {
-	s.tileMu.Lock()
-	if s.tileEvicting {
-		s.tileMu.Unlock()
-		return
-	}
-	s.tileEvicting = true
-	s.tileMu.Unlock()
-	defer func() {
-		s.tileMu.Lock()
-		s.tileEvicting = false
-		s.tileMu.Unlock()
-	}()
-
-	type entry struct {
-		path string
-		size int64
-		mod  time.Time
-	}
-	var entries []entry
-	var total int64
-	_ = filepath.Walk(s.cfg.TileCacheDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		entries = append(entries, entry{path, info.Size(), info.ModTime()})
-		total += info.Size()
-		return nil
-	})
-	target := s.tileMaxBytes * 8 / 10
-	if total > target {
-		sort.Slice(entries, func(i, j int) bool { return entries[i].mod.Before(entries[j].mod) })
-		for _, e := range entries {
-			if total <= target {
-				break
-			}
-			if os.Remove(e.path) == nil {
-				total -= e.size
-			}
-		}
-	}
-	s.tileMu.Lock()
-	s.tileBytes = total
-	s.tileMu.Unlock()
-}
-
-func serveTile(w http.ResponseWriter, b []byte) {
-	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
-	_, _ = w.Write(b)
-}
-
-// parseTilePath parses "/tiles/{z}/{x}/{y}.png" (integers only).
-func parseTilePath(p string) (z, x, y int, ok bool) {
-	p = strings.TrimPrefix(p, "/tiles/")
-	p = strings.TrimSuffix(p, ".png")
-	parts := strings.Split(p, "/")
-	if len(parts) != 3 {
-		return 0, 0, 0, false
-	}
-	var err error
-	if z, err = strconv.Atoi(parts[0]); err != nil {
-		return 0, 0, 0, false
-	}
-	if x, err = strconv.Atoi(parts[1]); err != nil {
-		return 0, 0, 0, false
-	}
-	if y, err = strconv.Atoi(parts[2]); err != nil {
-		return 0, 0, 0, false
-	}
-	return z, x, y, true
-}
-
-// rankedEntry is one (station, channel) candidate in a ranked result.
-type rankedEntry struct {
-	Callsign    string  `json:"callsign"`
-	Latitude    float64 `json:"latitude"`
-	Longitude   float64 `json:"longitude"`
-	Gridsquare  string  `json:"gridsquare"`
-	ServiceCode string  `json:"service_code"`
-	Mode        string  `json:"mode"`
-	ModeFamily  string  `json:"mode_family"`
-	Band        string  `json:"band"`
-	FrequencyHz float64 `json:"frequency_hz"`
-	Frequency   string  `json:"frequency"`
-	DistanceKm  float64 `json:"distance_km"`
-	BearingDeg  float64 `json:"bearing_deg"`
-	LinkQuality int     `json:"link_quality"`
-	BandOpen    bool    `json:"band_open"`
-	MUF         float64 `json:"muf_mhz,omitempty"`
-	Method      string  `json:"method"`
-	Note        string  `json:"note,omitempty"`
-}
-
-// Per-request rank deadlines. main.go sets WriteTimeout to
-// RankTimeoutVOACAP + a margin, so the HTTP write always outlives the rank.
-const (
-	RankTimeoutHeuristic = 120 * time.Second
-	RankTimeoutVOACAP    = 5 * time.Minute
-)
-
-// maxRankCandidates bounds a single rank request; a whole-feed rank (all
-// bands/modes) is a self-DoS, especially when each candidate runs VOACAP.
-const maxRankCandidates = 500
-
-func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
-	grid := r.URL.Query().Get("grid")
-	band := r.URL.Query().Get("band")
-	mode := r.URL.Query().Get("mode")
-	sc := r.URL.Query().Get("service_code")
-
-	switch r.Method {
-	case http.MethodGet:
-	case http.MethodPost:
-		var rr struct {
-			Grid        string `json:"grid"`
-			Band        string `json:"band"`
-			Mode        string `json:"mode"`
-			ServiceCode string `json:"service_code"`
-		}
-		body := http.MaxBytesReader(w, r.Body, 1<<20)
-		dec := json.NewDecoder(body)
-		if err := dec.Decode(&rr); err != nil {
-			http.Error(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
-			return
-		}
-		var extra any
-		if err := dec.Decode(&extra); err != io.EOF {
-			http.Error(w, "unexpected trailing data", http.StatusBadRequest)
-			return
-		}
-		grid, band, mode, sc = rr.Grid, rr.Band, rr.Mode, rr.ServiceCode
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	from, err := propagation.ParseLocator(grid)
-	if err != nil {
-		http.Error(w, "invalid grid locator: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Global admission: concurrent ranking requests each spawn workers and can
-	// run up to 500 predictions (or VOACAP subprocesses). Reject excess load
-	// instead of multiplying it.
-	select {
-	case s.rankSem <- struct{}{}:
-		defer func() { <-s.rankSem }()
-	default:
-		w.Header().Set("Retry-After", "10")
-		http.Error(w, "ranking is busy; try again shortly", http.StatusTooManyRequests)
-		return
-	}
-
-	ssn := s.heuristic.Conditions().Sunspots
-
-	type cand struct {
-		st   catalog.Station
-		ch   catalog.Channel
-		dist float64
-	}
-	var cands []cand
-	for _, st := range s.snapshotStations() {
-		to := propagation.Point{Lat: st.Latitude, Lon: st.Longitude}
-		d := propagation.DistanceKm(from, to)
-		for _, ch := range st.Channels {
-			if sc != "" && !strings.EqualFold(ch.ServiceCode, sc) {
-				continue
-			}
-			if band != "" && ch.Band != band {
-				continue
-			}
-			if mode != "" && !strings.EqualFold(ch.ModeFamily, mode) {
-				continue
-			}
-			// VHF/UHF is line-of-sight. This is a distance-based sanity bound
-			// (not continent-based), so nearby cross-border stations still
-			// appear while implausibly distant paths are dropped.
-			if ch.FrequencyHz >= 30e6 && d > s.vhfMaxRangeKm(parseRangeKm(ch.RadioRange)) {
-				continue
-			}
-			cands = append(cands, cand{st: st, ch: ch, dist: d})
-		}
-	}
-
-	// Keep the nearest candidates when capping. Truncating in callsign order
-	// used to drop the closest stations and keep arbitrary distant ones.
-	sort.Slice(cands, func(i, j int) bool { return cands[i].dist < cands[j].dist })
-	truncated := len(cands) > maxRankCandidates
-	if truncated {
-		cands = cands[:maxRankCandidates]
-		w.Header().Set("X-Rank-Truncated", "true")
-		log.Printf("rank: truncated to %d candidates; narrow band/mode for complete results", maxRankCandidates)
-	}
-
-	timeout := RankTimeoutHeuristic
-	if s.voacapEnabled {
-		timeout = RankTimeoutVOACAP
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), timeout)
-	defer cancel()
-
-	out := make([]rankedEntry, len(cands))
-	ok := make([]bool, len(cands))
-	workers := runtime.NumCPU()
-	if workers < 1 {
-		workers = 1
-	}
-	if workers > 4 {
-		workers = 4
-	}
-	jobs := make(chan int)
-	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for idx := range jobs {
-				c := cands[idx]
-				pred, err := s.ranker.Predict(ctx, propagation.Params{
-					FromLat:      from.Lat,
-					FromLon:      from.Lon,
-					ToLat:        c.st.Latitude,
-					ToLon:        c.st.Longitude,
-					FrequencyHz:  c.ch.FrequencyHz,
-					Mode:         c.ch.ModeFamily,
-					RadioRangeKm: parseRangeKm(c.ch.RadioRange),
-					SSN:          ssn,
-				})
-				if err != nil {
-					continue
-				}
-				ok[idx] = true
-				out[idx] = rankedEntry{
-					Callsign:    c.st.Callsign,
-					Latitude:    c.st.Latitude,
-					Longitude:   c.st.Longitude,
-					Gridsquare:  c.ch.Gridsquare,
-					ServiceCode: c.ch.ServiceCode,
-					Mode:        c.ch.Mode,
-					ModeFamily:  c.ch.ModeFamily,
-					Band:        c.ch.Band,
-					FrequencyHz: c.ch.FrequencyHz,
-					Frequency:   c.ch.Frequency,
-					DistanceKm:  pred.DistanceKm,
-					BearingDeg:  pred.BearingDeg,
-					LinkQuality: pred.LinkQuality,
-					BandOpen:    pred.BandOpen,
-					MUF:         pred.MUF,
-					Method:      pred.Method,
-					Note:        pred.Note,
-				}
-			}
-		}()
-	}
-dispatch:
-	for i := range cands {
-		select {
-		case jobs <- i:
-		case <-ctx.Done():
-			break dispatch
-		}
-	}
-	close(jobs)
-	wg.Wait()
-	if ctx.Err() != nil {
-		http.Error(w, "ranking timed out", http.StatusServiceUnavailable)
-		return
-	}
-
-	results := make([]rankedEntry, 0, len(out))
-	failed := 0
-	for i := range out {
-		if ok[i] {
-			results = append(results, out[i])
-		} else {
-			failed++
-		}
-	}
-	if failed > 0 {
-		w.Header().Set("X-Rank-Errors", strconv.Itoa(failed))
-		log.Printf("rank: %d of %d candidates failed", failed, len(out))
-	}
-	sort.Slice(results, func(i, j int) bool {
-		if results[i].LinkQuality != results[j].LinkQuality {
-			return results[i].LinkQuality > results[j].LinkQuality
-		}
-		return results[i].DistanceKm < results[j].DistanceKm
-	})
-	writeJSON(w, results)
-}
-
-// parseRangeKm parses the gateway's advertised radio range. Winlink reports
-// this in miles; we convert to km (the exact unit matters little for ranking).
-func parseRangeKm(s string) float64 {
-	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
-	if err != nil || f <= 0 {
-		return 0
-	}
-	return f * 1.60934
-}
-
-// vhfMaxRangeKm returns the maximum plausible distance for a VHF/UHF
-// (line-of-sight) path. This is purely distance-based (not continent-based), so
-// e.g. a station at Gibraltar still sees nearby Europe and Africa. The floor is
-// configurable (-vhf-max-range); set it large to effectively disable the filter.
-func (s *Server) vhfMaxRangeKm(advertisedKm float64) float64 {
-	floor := s.cfg.VHFMaxRangeKm
-	if floor <= 0 {
-		floor = 400 // default
-	}
-	return math.Max(floor, advertisedKm*1.5)
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

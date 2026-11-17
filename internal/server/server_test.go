@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -29,7 +30,6 @@ func newTestServer(t *testing.T, stations []catalog.Station) *Server {
 	heur := propagation.NewHeuristic(dir)
 	s := New(Config{
 		Version:      "test",
-		ServiceCodes: []string{"PUBLIC"},
 		TileCacheDir: t.TempDir(),
 	}, fstest.MapFS{
 		"index.html":   &fstest.MapFile{Data: []byte(`<link rel="stylesheet" href="style.css"><script src="theme.js"></script><script src="app.js"></script>`)},
@@ -221,7 +221,7 @@ func TestServerRefresh(t *testing.T) {
 	loader := cmsapi.NewLoader(dir, []string{"PUBLIC"}, 48, "k")
 	loader.Seed() // embedded snapshot
 	heur := propagation.NewHeuristic(dir)
-	s := New(Config{Version: "test", ServiceCodes: []string{"PUBLIC"}},
+	s := New(Config{Version: "test"},
 		fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}, loader, heur)
 
 	if err := s.Refresh(context.Background()); err != nil {
@@ -412,7 +412,6 @@ func TestDesktopSession(t *testing.T) {
 	quit := make(chan struct{}, 1)
 	s := New(Config{
 		Version:      "test",
-		ServiceCodes: []string{"PUBLIC"},
 		DesktopToken: "secret",
 		OnQuit:       func() { quit <- struct{}{} },
 	}, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}, loader, heur)
@@ -489,16 +488,21 @@ func TestServiceCodesConfig(t *testing.T) {
 	path := filepath.Join(dir, "service_codes.json")
 	s := New(Config{
 		Version:          "test",
-		ServiceCodes:     []string{"PUBLIC"},
 		ServiceCodesPath: path,
+		DesktopMode:      true,
 		TileCacheDir:     t.TempDir(),
 	}, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}, loader, heur)
 	s.refreshCodes = func(context.Context) error { return nil }
+	s.codeChangeMinInterval = 0 // tests exercise several changes in a row
 	h := s.Handler()
 
 	do := func(method, body string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(method, "/api/servicecodes/config", strings.NewReader(body)))
+		req := httptest.NewRequest(method, "/api/servicecodes/config", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", "http://127.0.0.1:1234")
+		req.Host = "127.0.0.1:1234"
+		h.ServeHTTP(rec, req)
 		return rec
 	}
 
@@ -623,5 +627,137 @@ func TestHandleRankBusy(t *testing.T) {
 	s.handleRank(rec, httptest.NewRequest(http.MethodPost, "/api/rank", strings.NewReader(`{"grid":"EN43bx"}`)))
 	if rec.Code != http.StatusTooManyRequests {
 		t.Errorf("status = %d, want 429", rec.Code)
+	}
+}
+
+func TestServiceCodesConfigProtections(t *testing.T) {
+	dir := t.TempDir()
+	loader := cmsapi.NewLoader(dir, []string{"PUBLIC"}, 48, "test")
+	heur := propagation.NewHeuristic(dir)
+	hfs := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
+
+	post := func(s *Server, body, origin, contentType, token string) int {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/servicecodes/config", strings.NewReader(body))
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+			if u, err := url.Parse(origin); err == nil {
+				req.Host = u.Host
+			}
+		}
+		if token != "" {
+			req.Header.Set(adminTokenHeader, token)
+		}
+		s.Handler().ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// Server/daemon mode without an admin token: the endpoint is disabled.
+	closed := New(Config{Version: "test"}, hfs, loader, heur)
+	if got := post(closed, `{"add":"MODEM73"}`, "http://127.0.0.1:1234", "application/json", ""); got != http.StatusForbidden {
+		t.Fatalf("disabled POST = %d, want 403", got)
+	}
+
+	desktop := New(Config{Version: "test", DesktopMode: true}, hfs, loader, heur)
+	desktop.codeChangeMinInterval = 0
+	// Cross-site text/plain is rejected without needing a preflight.
+	if got := post(desktop, `{"add":"MODEM73"}`, "http://127.0.0.1:1234", "text/plain", ""); got != http.StatusUnsupportedMediaType {
+		t.Fatalf("text/plain POST = %d, want 415", got)
+	}
+	if got := post(desktop, `{"add":"MODEM73"}`, "https://evil.example", "application/json", ""); got != http.StatusForbidden {
+		t.Fatalf("rebound-host POST = %d, want 403", got)
+	}
+	// A normal cross-origin request keeps the loopback Host but carries the
+	// attacker's Origin.
+	rec := httptest.NewRecorder()
+	cross := httptest.NewRequest(http.MethodPost, "/api/servicecodes/config", strings.NewReader(`{"add":"MODEM73"}`))
+	cross.Host = "127.0.0.1:1234"
+	cross.Header.Set("Origin", "https://evil.example")
+	cross.Header.Set("Content-Type", "application/json")
+	desktop.Handler().ServeHTTP(rec, cross)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin POST = %d, want 403", rec.Code)
+	}
+	if got := post(desktop, `{"add":"MODEM73"}`, "http://127.0.0.1:1234", "application/json", ""); got != http.StatusOK {
+		t.Fatalf("same-origin POST = %d, want 200", got)
+	}
+
+	// An admin token is required whenever it is configured.
+	admin := New(Config{Version: "test", AdminToken: "s3cret"}, hfs, loader, heur)
+	admin.codeChangeMinInterval = 0
+	if got := post(admin, `{"add":"MERCURY"}`, "http://127.0.0.1:1234", "application/json", ""); got != http.StatusForbidden {
+		t.Fatalf("missing admin token = %d, want 403", got)
+	}
+	if got := post(admin, `{"add":"MERCURY"}`, "http://127.0.0.1:1234", "application/json", "wrong"); got != http.StatusForbidden {
+		t.Fatalf("wrong admin token = %d, want 403", got)
+	}
+	if got := post(admin, `{"add":"MERCURY"}`, "http://127.0.0.1:1234", "application/json", "s3cret"); got != http.StatusOK {
+		t.Fatalf("valid admin token = %d, want 200", got)
+	}
+}
+
+func TestServiceCodesConfigRejectsInvalidAndLimits(t *testing.T) {
+	dir := t.TempDir()
+	loader := cmsapi.NewLoader(dir, []string{"PUBLIC"}, 48, "test")
+	heur := propagation.NewHeuristic(dir)
+	s := New(Config{Version: "test", DesktopMode: true, ServiceCodesPath: filepath.Join(dir, "codes.json")},
+		fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}, loader, heur)
+	s.codeChangeMinInterval = 0
+	s.refreshCodes = func(context.Context) error { return nil }
+
+	do := func(body string) int {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/servicecodes/config", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", "http://127.0.0.1:1234")
+		req.Host = "127.0.0.1:1234"
+		s.Handler().ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if got := do(`{"codes":["/../../../tmp/pwned","PUBLIC"]}`); got != http.StatusBadRequest {
+		t.Fatalf("traversal code = %d, want 400", got)
+	}
+	if got := do(`{"codes":["TOOLONGCODE123456"]}`); got != http.StatusBadRequest {
+		t.Fatalf("overlong code = %d, want 400", got)
+	}
+	tooMany := make([]string, 0, cmsapi.MaxServiceCodes+1)
+	for i := 0; i <= cmsapi.MaxServiceCodes; i++ {
+		tooMany = append(tooMany, fmt.Sprintf("CODE%d", i))
+	}
+	body, _ := json.Marshal(map[string]any{"codes": tooMany})
+	if got := do(string(body)); got != http.StatusBadRequest {
+		t.Fatalf("too many codes = %d, want 400", got)
+	}
+	if got := do(`{"unknown":true}`); got != http.StatusBadRequest {
+		t.Fatalf("unknown field = %d, want 400", got)
+	}
+
+	s.codeChangeMinInterval = time.Minute
+	if got := do(`{"add":"MERCURY"}`); got != http.StatusOK {
+		t.Fatalf("first change = %d, want 200", got)
+	}
+	if got := do(`{"add":"VARDEFM"}`); got != http.StatusTooManyRequests {
+		t.Fatalf("second change = %d, want 429", got)
+	}
+}
+
+func TestRankPerClientGate(t *testing.T) {
+	s := newTestServer(t, fixture())
+	key := "192.0.2.1"
+	if !s.rankClients.acquire(key) {
+		t.Fatal("could not seed client gate")
+	}
+	defer s.rankClients.release(key)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/rank", strings.NewReader(`{"grid":"EM38xx"}`))
+	req.RemoteAddr = "192.0.2.1:2345"
+	s.handleRank(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("second concurrent rank = %d, want 429", rec.Code)
 	}
 }
