@@ -127,7 +127,9 @@ low because their groundwave is weak and they are in the skip zone.
 
 The rank endpoint (`POST /api/rank`) accepts `{grid, band, mode, service_code}`
 and returns stations sorted by predicted link quality, with distance, bearing,
-band-open status, and MUF.
+band-open status, and MUF. When ranking across multiple bands or modes, each
+station row shows the band and mode that produced its best score, and that
+channel is highlighted.
 
 ## Installing VOACAP (optional)
 

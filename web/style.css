@@ -228,6 +228,9 @@ select:focus, input:focus { outline: none; border-color: var(--accent); }
 .ch-mode { font-weight: 600; }
 .ch-freq { color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .ch-sc { color: var(--text-dim); font-size: 11px; }
+.best-band { color: var(--accent); font-weight: 600; }
+.ch-row.ch-best { background: var(--accent-soft); border-radius: 3px; padding: 1px 4px; margin: 0 -4px; }
+.ch-row.ch-best .ch-mode { color: var(--accent); }
 .q-badge {
   margin-left: auto;
   font-weight: 700;

@@ -90,6 +90,14 @@ function modeDisplay(station) {
   return modes.join(" / ");
 }
 
+// True when channel c is the one the per-station best rank entry came from.
+function isRankedChannel(c, r) {
+  if (!r) return false;
+  return c.frequency_hz === r.frequency_hz &&
+    c.mode === r.mode &&
+    (c.service_code || "PUBLIC") === (r.service_code || "PUBLIC");
+}
+
 /* ---------- data ---------- */
 async function load() {
   const [config, serviceCodes, gateways, conditions] = await Promise.all([
@@ -235,11 +243,11 @@ function renderMarkers(stations) {
 
 function popupHTML(st, rank) {
   const channels = st.channels.map((c) =>
-    `<div class="ch-row"><span class="ch-mode">${esc(c.mode)}</span>` +
+    `<div class="ch-row${rank && isRankedChannel(c, rank) ? " ch-best" : ""}"><span class="ch-mode">${esc(c.mode)}</span>` +
     `<span class="ch-freq">${esc(c.frequency || fmtHz(c.frequency_hz))}</span>` +
     `<span class="ch-sc">${esc(c.service_code || "PUBLIC")}</span></div>`).join("");
   const rankLine = rank
-    ? `<div><b>Link quality:</b> ${rank.link_quality}% · ${rank.distance_km.toFixed(0)} km · ${rank.band_open ? "open" : "closed"}` +
+    ? `<div><b>Link quality:</b> ${rank.link_quality}% · <span class="best-band">${esc(rank.band)} ${esc(rank.mode)}</span> · ${rank.distance_km.toFixed(0)} km · ${rank.band_open ? "open" : "closed"}` +
       (rank.muf_mhz ? ` · MUF ${rank.muf_mhz.toFixed(1)} MHz` : "") +
       (rank.note ? ` · ${esc(rank.note)}` : "") + `</div>`
     : "";
@@ -293,18 +301,27 @@ function renderList(stations) {
     const fc = st.hours_since_status == null || st.hours_since_status < 0 ? "fresh-gray"
       : st.hours_since_status < 2 ? "fresh-green"
       : st.hours_since_status < 4 ? "fresh-yellow" : "fresh-red";
+    // Put the best-ranked channel first so it stays visible when the station has
+    // more channels than the list shows.
+    let chans = st.channels;
+    if (r) {
+      const bi = chans.findIndex((c) => isRankedChannel(c, r));
+      if (bi > 0) chans = [chans[bi], ...chans.slice(0, bi), ...chans.slice(bi + 1)];
+    }
     li.innerHTML =
       `<div style="display:flex;align-items:center">` +
         `<span class="fresh ${fc}"></span>` +
         `<span class="station-call">${esc(st.callsign)}<span class="sq">${esc(firstGrid(st))}</span></span>` +
         (r ? qualityBadge(r.link_quality) : "") +
       `</div>` +
-      `<div class="station-meta">${esc(modeDisplay(st))} · ${freshText(st.hours_since_status)}` +
+      `<div class="station-meta">` +
+        (r ? `<span class="best-band" title="Highest-ranked band and mode">★ ${esc(r.band)} ${esc(r.mode)}</span>` : esc(modeDisplay(st))) +
+        ` · ${freshText(st.hours_since_status)}` +
         (r ? ` · ${r.distance_km.toFixed(0)} km` : "") +
         (r && r.note ? ` · ${esc(r.note)}` : "") + `</div>` +
-      `<div class="station-channels">${st.channels.slice(0, 4).map((c) =>
-        `<div class="ch-row"><span class="ch-mode">${esc(c.mode)}</span><span class="ch-freq">${esc(c.frequency || fmtHz(c.frequency_hz))}</span><span class="ch-sc">${esc(c.service_code || "PUBLIC")}</span></div>`).join("")}` +
-        (st.channels.length > 4 ? `<div class="station-meta">+${st.channels.length - 4} more</div>` : "") +
+      `<div class="station-channels">${chans.slice(0, 4).map((c) =>
+        `<div class="ch-row${r && isRankedChannel(c, r) ? " ch-best" : ""}"><span class="ch-mode">${esc(c.mode)}</span><span class="ch-freq">${esc(c.frequency || fmtHz(c.frequency_hz))}</span><span class="ch-sc">${esc(c.service_code || "PUBLIC")}</span></div>`).join("")}` +
+        (chans.length > 4 ? `<div class="station-meta">+${chans.length - 4} more</div>` : "") +
       `</div>`;
     li.addEventListener("click", () => {
       if (!st.latitude && !st.longitude) return;
