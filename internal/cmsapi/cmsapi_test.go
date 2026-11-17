@@ -1,6 +1,10 @@
 package cmsapi
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,5 +44,50 @@ func TestSeedCache(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Error("cache data not loaded")
+	}
+}
+
+func TestFetchFormEncoding(t *testing.T) {
+	var got url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("ParseForm: %v", err)
+		}
+		got = r.PostForm
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"Gateways":[]}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient("testkey")
+	c.baseURL = srv.URL
+
+	// historyHours above the max is clamped to 48; two service codes are sent
+	// as repeated form fields.
+	if _, err := c.Fetch(context.Background(), []string{"PUBLIC", "MERCURY"}, 99); err != nil {
+		t.Fatal(err)
+	}
+	if got.Get("key") != "testkey" {
+		t.Errorf("key = %q", got.Get("key"))
+	}
+	if got.Get("Mode") != "AnyAll" {
+		t.Errorf("Mode = %q", got.Get("Mode"))
+	}
+	if got.Get("HistoryHours") != "48" {
+		t.Errorf("HistoryHours = %q, want 48 (clamped)", got.Get("HistoryHours"))
+	}
+	if codes := got["ServiceCodes"]; len(codes) != 2 || codes[0] != "PUBLIC" || codes[1] != "MERCURY" {
+		t.Errorf("ServiceCodes = %v", codes)
+	}
+
+	// Empty service codes default to PUBLIC; zero history defaults to 48.
+	if _, err := c.Fetch(context.Background(), nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	if codes := got["ServiceCodes"]; len(codes) != 1 || codes[0] != "PUBLIC" {
+		t.Errorf("default ServiceCodes = %v", codes)
+	}
+	if got.Get("HistoryHours") != "48" {
+		t.Errorf("default HistoryHours = %q", got.Get("HistoryHours"))
 	}
 }

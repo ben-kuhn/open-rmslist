@@ -28,6 +28,8 @@ const (
 type Client struct {
 	HTTP *http.Client
 	Key  string
+
+	baseURL string // defaults to RootURL; overridable in tests
 }
 
 // NewClient returns a client using key, falling back to DefaultAccessKey.
@@ -36,8 +38,9 @@ func NewClient(key string) *Client {
 		key = DefaultAccessKey
 	}
 	return &Client{
-		HTTP: &http.Client{Timeout: 90 * time.Second},
-		Key:  key,
+		HTTP:    &http.Client{Timeout: 90 * time.Second},
+		Key:     key,
+		baseURL: RootURL,
 	}
 }
 
@@ -60,7 +63,11 @@ func (c *Client) Fetch(ctx context.Context, serviceCodes []string, historyHours 
 		form.Add("ServiceCodes", sc)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, RootURL+PathGatewayStatus, strings.NewReader(form.Encode()))
+	base := c.baseURL
+	if base == "" {
+		base = RootURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+PathGatewayStatus, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
 	}
