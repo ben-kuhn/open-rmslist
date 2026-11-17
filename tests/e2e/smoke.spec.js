@@ -30,7 +30,12 @@ test("deployed UI loads with map tiles and data", async ({ page }) => {
   expect(await page.locator("#list li").count()).toBeGreaterThan(0);
 
   expect(badTileResponses, badTileResponses.join("\n")).toEqual([]);
-  expect(consoleErrors, consoleErrors.join("\n")).toEqual([]);
+
+  // Cloudflare injects its analytics beacon into proxied HTML; our strict CSP
+  // blocks it (by design). Ignore only that known third-party script.
+  const benign = (m) => /cloudflareinsights\.com|beacon\.min\.js/i.test(m);
+  const realErrors = consoleErrors.filter((m) => !benign(m));
+  expect(realErrors, realErrors.join("\n")).toEqual([]);
 });
 
 test("deployed API endpoints respond", async ({ request }) => {
