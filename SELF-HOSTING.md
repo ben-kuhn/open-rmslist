@@ -92,7 +92,7 @@ endpoints are token-guarded and disabled in `-d` service mode.
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
 | `-listen` | `RMSRADAR_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
-| `-service-codes` | `RMSRADAR_SERVICE_CODES` | `PUBLIC,EMCOMM` | Comma-separated service codes to fetch (no wildcard) |
+| `-service-codes` | `RMSRADAR_SERVICE_CODES` | `PUBLIC,EMCOMM,MERCURY,VARDEFM,MODEM73,DATA2G` | Comma-separated service codes to fetch (no wildcard) |
 | `-refresh` | `RMSRADAR_REFRESH` | `24h` | Gateway list refresh interval; the UI **Refresh** button forces an update (five-minute cooldown) |
 | `-cache-dir` | `RMSRADAR_CACHE_DIR` | `./data` | Cache directory |
 | `-key` | `RMSRADAR_KEY` | Pat's community key | Winlink CMS access key |
@@ -126,7 +126,8 @@ and `VARDEFM` channels as **VardeFM**, even though the API advertises them as
 The API's raw mode is preserved in `raw_mode` and shown as a hover hint.
 
 The Winlink API has no wildcard for service codes, so `-service-codes` lists the
-codes to request. The default is the two documented public codes:
+codes to request. The default includes the documented public codes and the
+known community codes:
 
 | Code | Notes |
 |------|-------|
@@ -162,9 +163,10 @@ rejected. Codes are limited to `A-Z`, `0-9`, and `_` (1–16 characters, at most
 32 codes). The cache file is named from a hash of the code list, never from the
 raw text.
 
-Add any private group code you are entitled to with
-`-service-codes PUBLIC,MYGROUP` (or `RMSRADAR_SERVICE_CODES`); codes with no
-gateways simply contribute nothing.
+Winlink does not publish private group codes; if your group uses one, add it in
+the desktop **Service codes…** dialog or with `-service-codes
+PUBLIC,MYGROUP` (or `RMSRADAR_SERVICE_CODES`). Codes with no gateways simply
+contribute nothing. There is no API call that enumerates all private codes.
 
 The app serves a per-client setup guide at `/clients.html` (Winlink Express,
 PAT, WoAD, RadioMail, HTCommander) and a gateway guide at `/gateway.html`

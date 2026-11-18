@@ -133,6 +133,7 @@ async function load() {
   state.conditions = conditions;
 
   updateCodesAvailability();
+  updateDocsLinks();
   applyTileLayer();
   $("status").textContent =
     `${state.stations.length} gateways · ` + (conditions ? "conditions ready" : "no conditions");
@@ -582,6 +583,31 @@ function initDesktopSession() {
       document.body.innerHTML =
         '<div class="doc"><h1>RMS Radar has stopped</h1><p>You can close this tab.</p></div>';
     });
+  }
+}
+
+/* ---------- documentation links ---------- */
+function updateDocsLinks() {
+  if (!state.config.desktop) return;
+  for (const page of ["clients", "gateway"]) {
+    const link = $(`${page}-link`);
+    if (!link) continue;
+    const url = `https://rmsradar.ku0hn.radio/${page}.html`;
+    link.href = url;
+    link.removeAttribute("target");
+    link.rel = "noopener noreferrer";
+    link.onclick = async (e) => {
+      e.preventDefault();
+      try {
+        await fetchJSON("/api/desktop/open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ page }),
+        });
+      } catch (err) {
+        setNote("Could not open the setup guide: " + err.message);
+      }
+    };
   }
 }
 

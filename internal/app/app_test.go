@@ -8,6 +8,8 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
 )
 
 func TestStartRejectsInvalidRefresh(t *testing.T) {
@@ -70,4 +72,28 @@ func TestStartAndClose(t *testing.T) {
 		t.Fatalf("URL = %q", a.URL())
 	}
 	a.Close()
+}
+
+func TestServiceCodesFromDiskMigratesLegacyDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "service_codes.json")
+	fallback := append([]string(nil), cmsapi.DefaultServiceCodes...)
+	if err := os.WriteFile(path, []byte(`["PUBLIC","EMCOMM"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := serviceCodesFromDisk(path, fallback)
+	if len(got) != len(fallback) {
+		t.Fatalf("legacy default was not migrated: %v", got)
+	}
+	if _, err := os.Stat(path + ".migrated"); err != nil {
+		t.Fatalf("migration marker missing: %v", err)
+	}
+	// After migration, an explicit choice of just PUBLIC/EMCOMM is respected.
+	if err := os.WriteFile(path, []byte(`["PUBLIC","EMCOMM"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = serviceCodesFromDisk(path, fallback)
+	if len(got) != 2 || got[0] != "EMCOMM" || got[1] != "PUBLIC" {
+		t.Fatalf("explicit choice was overwritten: %v", got)
+	}
 }

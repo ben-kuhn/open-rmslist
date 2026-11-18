@@ -2,6 +2,9 @@ package server
 
 import (
 	"crypto/subtle"
+	"encoding/json"
+	"log"
+	"mime"
 	"net/http"
 	"time"
 )
@@ -123,4 +126,53 @@ func (s *Server) handleDesktopQuit(w http.ResponseWriter, r *http.Request) {
 	if s.onQuit != nil {
 		go s.onQuit()
 	}
+}
+
+// handleDesktopOpen opens one of the published documentation pages in the
+// system browser. The native webview does not handle target=_blank links
+// reliably, so the desktop UI calls this endpoint instead. Only two fixed pages
+// are allowed, and the endpoint exists only in desktop mode.
+func (s *Server) handleDesktopOpen(w http.ResponseWriter, r *http.Request) {
+	if !s.desktopMode && s.desktopToken == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.sameOrigin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+		return
+	}
+	var req struct {
+		Page string `json:"page"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	var url string
+	switch req.Page {
+	case "clients":
+		url = "https://rmsradar.ku0hn.radio/clients.html"
+	case "gateway":
+		url = "https://rmsradar.ku0hn.radio/gateway.html"
+	default:
+		http.Error(w, "unknown documentation page", http.StatusBadRequest)
+		return
+	}
+	if err := s.openURL(url); err != nil {
+		log.Printf("open documentation: %v", err)
+		http.Error(w, "could not open documentation", http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "opened"})
 }

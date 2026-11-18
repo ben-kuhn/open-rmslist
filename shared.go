@@ -14,12 +14,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
 	"github.com/ben-kuhn/rms-radar/internal/propagation"
 	"github.com/ben-kuhn/rms-radar/internal/voacapget"
 )
 
 // version is overridable at link time via -ldflags "-X main.version=...".
-var version = "0.2.5"
+var version = "0.2.6"
 
 //go:embed all:web
 var webFS embed.FS
@@ -146,6 +147,10 @@ func downloadVOACAPOpts(url, destDir string, requireSignature bool) (string, str
 	}
 	log.Printf("voacapl ready: %s (data %s)", exe, data)
 	return exe, data
+}
+
+func defaultServiceCodesCSV() string {
+	return strings.Join(cmsapi.DefaultServiceCodes, ",")
 }
 
 func splitCSV(s string) []string {

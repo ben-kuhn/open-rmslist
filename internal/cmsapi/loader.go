@@ -33,6 +33,12 @@ const (
 
 var serviceCodeRE = regexp.MustCompile(`^[A-Z0-9_]{1,16}$`)
 
+// DefaultServiceCodes is the public/community set fetched when the caller does
+// not configure a list. Winlink exposes no wildcard and does not publish private
+// group codes, so these are the known public/community codes; users can add a
+// private group code in the desktop dialog or through the server admin API.
+var DefaultServiceCodes = []string{"PUBLIC", "EMCOMM", "MERCURY", "VARDEFM", "MODEM73", "DATA2G"}
+
 // NormalizeServiceCodes trims, uppercases, validates, deduplicates, and sorts
 // service codes. It rejects path separators, whitespace, and any other
 // character that is not part of the Winlink service-code alphabet.
@@ -105,7 +111,7 @@ type Loader struct {
 func NewLoader(cacheDir string, codes []string, historyHours int, key string) *Loader {
 	normalized, err := NormalizeServiceCodes(codes)
 	if err != nil || len(normalized) == 0 {
-		normalized = []string{"PUBLIC"}
+		normalized = append([]string(nil), DefaultServiceCodes...)
 	}
 	return &Loader{
 		client:       NewClient(key),

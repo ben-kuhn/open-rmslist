@@ -24,7 +24,7 @@ import (
 func main() {
 	var (
 		addr         = flag.String("listen", envOr("RMSRADAR_LISTEN", "127.0.0.1:0"), "local listen address (default: an ephemeral localhost port)")
-		serviceCodes = flag.String("service-codes", envOr("RMSRADAR_SERVICE_CODES", "PUBLIC,EMCOMM"), "comma-separated Winlink service codes to fetch (the API accepts explicit codes; there is no wildcard)")
+		serviceCodes = flag.String("service-codes", envOr("RMSRADAR_SERVICE_CODES", defaultServiceCodesCSV()), "comma-separated Winlink service codes to fetch (the API accepts explicit codes; there is no wildcard)")
 		refresh      = flag.Duration("refresh", envDuration("RMSRADAR_REFRESH", 24*time.Hour), "gateway list refresh interval (daily by default; the UI Refresh button forces an update)")
 		cacheDir     = flag.String("cache-dir", envOr("RMSRADAR_CACHE_DIR", defaultDesktopCacheDir()), "cache directory for gateway list, tiles, and logs")
 		accessKey    = flag.String("key", envOr("RMSRADAR_KEY", cmsapi.DefaultAccessKey), "Winlink CMS access key")

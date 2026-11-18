@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ben-kuhn/rms-radar/internal/atomicfile"
 	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
 	"github.com/ben-kuhn/rms-radar/internal/propagation"
 	"github.com/ben-kuhn/rms-radar/internal/server"
@@ -72,7 +73,7 @@ func Start(parent context.Context, cfg Config) (*App, error) {
 		return nil, fmt.Errorf("service codes: %w", err)
 	}
 	if len(seedCodes) == 0 {
-		seedCodes = []string{"PUBLIC"}
+		seedCodes = append([]string(nil), cmsapi.DefaultServiceCodes...)
 	}
 	ctx, cancel := context.WithCancel(parent)
 	a := &App{cancel: cancel, done: make(chan struct{})}
@@ -179,6 +180,20 @@ func serviceCodesFromDisk(path string, fallback []string) []string {
 	normalized, err := cmsapi.NormalizeServiceCodes(codes)
 	if err != nil || len(normalized) == 0 {
 		return fallback
+	}
+	// One-time migration: the old default was PUBLIC,EMCOMM. Adopt the larger
+	// known-community default for users who never made an explicit selection,
+	// then leave the saved file alone on future starts (including if they
+	// deliberately choose just those two codes later).
+	if len(normalized) == 2 && normalized[0] == "EMCOMM" && normalized[1] == "PUBLIC" {
+		marker := path + ".migrated"
+		if _, err := os.Stat(marker); os.IsNotExist(err) && len(fallback) > 2 {
+			if b, err := json.Marshal(fallback); err == nil {
+				_ = atomicfile.Write(path, b, 0o644)
+				_ = atomicfile.Write(marker, []byte("v2\n"), 0o644)
+			}
+			return fallback
+		}
 	}
 	return normalized
 }

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ben-kuhn/rms-radar/internal/browser"
 	"github.com/ben-kuhn/rms-radar/internal/catalog"
 	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
 	"github.com/ben-kuhn/rms-radar/internal/propagation"
@@ -33,6 +34,9 @@ type Config struct {
 	// AdminToken, when set, is required in the X-RMS-Radar-Admin header to
 	// change service codes. It also enables the endpoint on server builds.
 	AdminToken string
+	// OpenURL opens an external documentation page. It defaults to the system
+	// browser; tests can replace it.
+	OpenURL func(string) error
 	// DesktopMode enables service-code editing from the same-origin UI without
 	// an admin token. It is set only by the native and browser desktop modes.
 	DesktopMode bool
@@ -82,6 +86,7 @@ type Server struct {
 	// refresh prevent a burst of POSTs from piling up upstream fetches.
 	adminToken            string
 	desktopMode           bool
+	openURL               func(string) error
 	codeChangeMu          sync.Mutex
 	lastCodeChange        time.Time
 	codeChangeMinInterval time.Duration
@@ -135,6 +140,7 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 
 		adminToken:            cfg.AdminToken,
 		desktopMode:           cfg.DesktopMode,
+		openURL:               cfg.OpenURL,
 		codeChangeMinInterval: time.Second,
 		codeRefreshSem:        make(chan struct{}, 1),
 		refreshCooldown:       5 * time.Minute,
@@ -151,6 +157,9 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 	}
 	if s.tileMaxBytes <= 0 {
 		s.tileMaxBytes = 512 << 20
+	}
+	if s.openURL == nil {
+		s.openURL = browser.Open
 	}
 	if cfg.TileCacheDir != "" {
 		s.tileBytes = dirSize(cfg.TileCacheDir)
@@ -211,6 +220,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/desktop/beat", s.handleDesktopBeat)
 	mux.HandleFunc("/api/desktop/bye", s.handleDesktopBye)
 	mux.HandleFunc("/api/desktop/quit", s.handleDesktopQuit)
+	mux.HandleFunc("/api/desktop/open", s.handleDesktopOpen)
 	mux.HandleFunc("/tiles/", s.handleTiles)
 
 	fileServer := http.FileServer(http.FS(s.web))
@@ -333,6 +343,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"service_codes":                s.loader.ServiceCodes(),
 		"service_codes_editable":       s.serviceCodeEditingEnabled(),
 		"service_codes_token_required": s.serviceCodeTokenRequired(),
+		"desktop":                      s.desktopMode || s.desktopToken != "",
 		"voacap":                       s.voacapEnabled,
 		"tile_url":                     proxyTilePath,
 	})
