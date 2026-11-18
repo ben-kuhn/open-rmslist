@@ -168,6 +168,11 @@ the desktop **Service codes…** dialog or with `-service-codes
 PUBLIC,MYGROUP` (or `RMSRADAR_SERVICE_CODES`). Codes with no gateways simply
 contribute nothing. There is no API call that enumerates all private codes.
 
+Runtime changes made in the desktop dialog are preserved across restarts while
+the configured seed list is unchanged. Changing `-service-codes` or the module
+option intentionally re-seeds the list, so an operator configuration change
+takes effect.
+
 The app serves a per-client setup guide at `/clients.html` (Winlink Express,
 PAT, WoAD, RadioMail, HTCommander) and a gateway guide at `/gateway.html`
 (RMS Trimode and BPQ32/LinBPQ, including the one-frequency/mode report caveat).
