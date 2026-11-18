@@ -10,7 +10,7 @@
 # local build provides it.
 
 Name:           rms-radar
-Version:        0.2.6
+Version:        0.2.7
 Release:        1%{?dist}
 Summary:        Winlink RMS gateway map with service-code filtering and propagation ranking
 
@@ -71,6 +71,8 @@ install -Dm644 contrib/desktop/rms-radar.desktop %{buildroot}%{_datadir}/applica
 %systemd_postun rms-radar.service
 
 %changelog
+* Wed Nov 18 2026 RMS Radar contributors - 0.2.7-1
+- Replace EMCOMM with IONHF in the default service-code set
 * Wed Nov 18 2026 RMS Radar contributors - 0.2.6-1
 - Desktop setup links open in the system browser; known community codes by default
 * Tue Nov 17 2026 RMS Radar contributors - 0.2.5-1

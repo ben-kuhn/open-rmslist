@@ -5,6 +5,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ben-kuhn/rms-radar/internal/atomicfile"
@@ -165,37 +168,77 @@ func Start(parent context.Context, cfg Config) (*App, error) {
 
 // serviceCodesFromDisk uses the persisted runtime list when present, otherwise
 // the configured seed list.
+func sameServiceCodes(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func isPreviousServiceDefault(codes []string) bool {
+	// Sorted forms of the default sets used before 0.2.7.
+	oldTwo := []string{"EMCOMM", "PUBLIC"}
+	oldSix := []string{"DATA2G", "EMCOMM", "MERCURY", "MODEM73", "PUBLIC", "VARDEFM"}
+	return sameServiceCodes(codes, oldTwo) || sameServiceCodes(codes, oldSix)
+}
+
+func serviceCodesSeedHash(codes []string) string {
+	sum := sha256.Sum256([]byte(strings.Join(codes, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+func writeServiceCodeMarker(path, hash string) {
+	_ = atomicfile.Write(path, []byte(hash+"\n"), 0o644)
+}
+
+// serviceCodesFromDisk uses a persisted UI selection while the configured seed
+// is unchanged, and re-seeds when the operator changes the configured list. The
+// seed hash marker lets an explicit UI choice survive restarts without making
+// operator configuration changes ineffective.
 func serviceCodesFromDisk(path string, fallback []string) []string {
 	if path == "" {
 		return fallback
 	}
+	seedHash := serviceCodesSeedHash(fallback)
+	markerPath := path + ".seed"
+	marker, _ := os.ReadFile(markerPath)
+	markerCurrent := strings.TrimSpace(string(marker)) == seedHash
+
 	b, err := os.ReadFile(path)
 	if err != nil {
+		writeServiceCodeMarker(markerPath, seedHash)
 		return fallback
 	}
 	var codes []string
 	if json.Unmarshal(b, &codes) != nil {
+		writeServiceCodeMarker(markerPath, seedHash)
 		return fallback
 	}
-	normalized, err := cmsapi.NormalizeServiceCodes(codes)
-	if err != nil || len(normalized) == 0 {
+	normalized, nerr := cmsapi.NormalizeServiceCodes(codes)
+	if nerr != nil || len(normalized) == 0 {
+		writeServiceCodeMarker(markerPath, seedHash)
 		return fallback
 	}
-	// One-time migration: the old default was PUBLIC,EMCOMM. Adopt the larger
-	// known-community default for users who never made an explicit selection,
-	// then leave the saved file alone on future starts (including if they
-	// deliberately choose just those two codes later).
-	if len(normalized) == 2 && normalized[0] == "EMCOMM" && normalized[1] == "PUBLIC" {
-		marker := path + ".migrated"
-		if _, err := os.Stat(marker); os.IsNotExist(err) && len(fallback) > 2 {
-			if b, err := json.Marshal(fallback); err == nil {
-				_ = atomicfile.Write(path, b, 0o644)
-				_ = atomicfile.Write(marker, []byte("v2\n"), 0o644)
-			}
-			return fallback
-		}
+	if markerCurrent {
+		return normalized
 	}
-	return normalized
+	// First run with this marker: migrate a known old default; preserve a
+	// custom selection. A marker from a different seed means the operator
+	// changed the configured list, which is authoritative.
+	if len(marker) == 0 && !isPreviousServiceDefault(normalized) {
+		writeServiceCodeMarker(markerPath, seedHash)
+		return normalized
+	}
+	if b, err := json.Marshal(fallback); err == nil {
+		_ = atomicfile.Write(path, b, 0o644)
+	}
+	writeServiceCodeMarker(markerPath, seedHash)
+	return fallback
 }
 
 // URL returns a browser-friendly base URL for the listener. A :0 listen

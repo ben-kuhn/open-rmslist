@@ -40,7 +40,7 @@ services.rms-radar = {
   enable = true;
   listenAddress = "0.0.0.0";
   port = 8079;
-  serviceCodes = [ "PUBLIC" "EMCOMM" "MERCURY" "VARDEFM" ];
+  serviceCodes = [ "PUBLIC" "MERCURY" "VARDEFM" "MODEM73" "DATA2G" "IONHF" ];
 };
 ```
 
@@ -92,7 +92,7 @@ endpoints are token-guarded and disabled in `-d` service mode.
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
 | `-listen` | `RMSRADAR_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
-| `-service-codes` | `RMSRADAR_SERVICE_CODES` | `PUBLIC,EMCOMM,MERCURY,VARDEFM,MODEM73,DATA2G` | Comma-separated service codes to fetch (no wildcard) |
+| `-service-codes` | `RMSRADAR_SERVICE_CODES` | `PUBLIC,MERCURY,VARDEFM,MODEM73,DATA2G,IONHF` | Comma-separated service codes to fetch (no wildcard) |
 | `-refresh` | `RMSRADAR_REFRESH` | `24h` | Gateway list refresh interval; the UI **Refresh** button forces an update (five-minute cooldown) |
 | `-cache-dir` | `RMSRADAR_CACHE_DIR` | `./data` | Cache directory |
 | `-key` | `RMSRADAR_KEY` | Pat's community key | Winlink CMS access key |
@@ -122,7 +122,7 @@ The service-code dropdown is built from the codes present in the fetched data,
 and the mode dropdown shows the modes those channels advertise. Community-modem
 codes are labelled with the service name: `MERCURY` channels show as **Mercury**
 and `VARDEFM` channels as **VardeFM**, even though the API advertises them as
-`VARA`. Other codes (`PUBLIC`, `EMCOMM`, private groups) keep the reported mode.
+`VARA`. Other codes (`PUBLIC`, `IONHF`, private groups) keep the reported mode.
 The API's raw mode is preserved in `raw_mode` and shown as a hover hint.
 
 The Winlink API has no wildcard for service codes, so `-service-codes` lists the
@@ -132,11 +132,11 @@ known community codes:
 | Code | Notes |
 |------|-------|
 | `PUBLIC` | maritime and open amateur gateways |
-| `EMCOMM` | emergency gateways that do not allow public access |
 | `MERCURY` | Mercury HF gateways (community) |
 | `VARDEFM` | VardeFM gateways (community) |
 | `MODEM73` | Modem73 gateways (community) |
 | `DATA2G` | Data2G gateways (community) |
+| `IONHF` | IONHF gateways (community) |
 | *other* | any community or private group code |
 
 The list is **runtime-configurable** — in the native and browser desktop apps,

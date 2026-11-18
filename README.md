@@ -62,7 +62,7 @@ Self-hosting the web version? See [SELF-HOSTING.md](SELF-HOSTING.md) for `.deb`,
 1. **Enter your grid square** (for example `EM38xx`). Not sure? Use a
    [Maidenhead locator tool](https://www.levinecentral.com/ham/grid_square.php).
 2. **Pick a service code** — `PUBLIC` is the usual open amateur code.
-   `EMCOMM`, `MERCURY`, `VARDEFM`, `MODEM73`, and `DATA2G` are common community
+   `IONHF`, `MERCURY`, `VARDEFM`, `MODEM73`, and `DATA2G` are common community
    codes; other projects and private groups use their own. You can also
    filter by band and mode.
 3. **Press Rank** to score the gateways by predicted link quality. Each row
@@ -80,7 +80,7 @@ offline.
 ## What it does
 
 - **Maps the live Winlink gateway list** on OpenStreetMap.
-- **Filters by service code** — `PUBLIC`, `EMCOMM`, `MERCURY`, `VARDEFM`, `MODEM73`,
+- **Filters by service code** — `PUBLIC`, `IONHF`, `MERCURY`, `VARDEFM`, `MODEM73`,
   `DATA2G`, and any other community or private codes you configure.
 - **Shows the real mode** for every channel. Mercury and VardeFM gateways are
   labelled from their service code, even though Winlink advertises them as VARA.

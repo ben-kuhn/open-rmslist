@@ -187,20 +187,24 @@ jobs:
   voacap-macos:
     name: VOACAP bundle (macOS)
     needs: verify
-    runs-on: macos-latest
+    # The macOS engine/data bundle is static and was built and smoke-tested on
+    # a macOS runner in CI. Reuse the pinned, signed v0.2.6 mirror here so the
+    # release does not depend on scarce macOS arm64 runner capacity; the sign
+    # job re-signs it with the current key.
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: "stable"
-      - name: install gfortran
-        run: brew install gfortran || brew install gcc
-      - name: build bundle
-        env:
-          OUT: dist-voacap
-          GOOS: darwin
-          GOARCH: arm64
-        run: ./scripts/build-voacap.sh
+      - name: fetch pinned macOS bundle
+        run: |
+          set -euo pipefail
+          mkdir -p dist-voacap
+          base="https://github.com/ben-kuhn/rms-radar/releases/download/v0.2.6"
+          name="voacap-macos-arm64.tar.gz"
+          expected="f02b03f8763189489dd92cc7843128bba4b85d91978bd08060ff4fde70fb1214"
+          curl -fsSL --retry 4 --retry-delay 5 -o "dist-voacap/$name" "$base/$name"
+          got="$(sha256sum "dist-voacap/$name" | awk '{print $1}')"
+          [ "$got" = "$expected" ] || { echo "macOS bundle SHA-256 mismatch: $got" >&2; exit 1; }
+          curl -fsSL --retry 4 --retry-delay 5 -o "dist-voacap/$name.sha256" "$base/$name.sha256"
+          (cd dist-voacap && sha256sum -c "$name.sha256")
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: voacap-macos
