@@ -158,24 +158,27 @@ func (s *Server) validServiceCodeRequest(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) sameOrigin(r *http.Request) bool {
+	if !originHostMatches(r) {
+		return false
+	}
+	// Without an admin token, also require a loopback Host. This blocks DNS
+	// rebinding from a public hostname to the desktop server.
+	return s.adminToken != "" || isLocalHost(r.Host)
+}
+
+func originHostMatches(r *http.Request) bool {
 	if sfs := r.Header.Get("Sec-Fetch-Site"); sfs == "cross-site" || sfs == "same-site" {
 		return false
 	}
 	origin := r.Header.Get("Origin")
 	if origin == "" {
-		// Non-browser clients (and some webviews) omit Origin. Without an admin
-		// token, only loopback Host headers are allowed, which blocks DNS
-		// rebinding from a public hostname to 127.0.0.1.
-		return s.adminToken != "" || isLocalHost(r.Host)
+		return true
 	}
 	u, err := url.Parse(origin)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return false
 	}
-	if !strings.EqualFold(u.Host, r.Host) {
-		return false
-	}
-	return s.adminToken != "" || isLocalHost(r.Host)
+	return strings.EqualFold(u.Host, r.Host)
 }
 
 func isLocalHost(host string) bool {

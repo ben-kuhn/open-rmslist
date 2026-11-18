@@ -71,8 +71,11 @@ Self-hosting the web version? See [SELF-HOSTING.md](SELF-HOSTING.md) for `.deb`,
    modes, service codes, and the link estimate.
 5. On a phone, use the **Map** and **List** tabs to switch views.
 
-The map is dark by default; the ◐ button switches to light mode. The gateway
-list and map tiles are cached, so previously viewed areas work offline.
+The gateway list refreshes once a day automatically. Press **Refresh** for an
+immediate update; it is limited to once every five minutes to be gentle on the
+Winlink API. The map is dark by default; the ◐ button switches to light mode.
+The gateway list and map tiles are cached, so previously viewed areas work
+offline.
 
 ## What it does
 

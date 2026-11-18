@@ -86,6 +86,9 @@ type Server struct {
 	lastCodeChange        time.Time
 	codeChangeMinInterval time.Duration
 	codeRefreshSem        chan struct{}
+	refreshMu             sync.Mutex
+	refreshCooldown       time.Duration
+	lastManualRefresh     time.Time
 
 	// Desktop (double-click) lifecycle: the page checks in while it is open,
 	// and the process exits once every page has gone away.
@@ -134,6 +137,7 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 		desktopMode:           cfg.DesktopMode,
 		codeChangeMinInterval: time.Second,
 		codeRefreshSem:        make(chan struct{}, 1),
+		refreshCooldown:       5 * time.Minute,
 
 		desktopToken:   cfg.DesktopToken,
 		onQuit:         cfg.OnQuit,
@@ -202,6 +206,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/conditions", s.handleConditions)
 	mux.HandleFunc("/api/rank", s.handleRank)
 	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/api/refresh", s.handleRefresh)
 	mux.HandleFunc("/api/desktop/hello", s.handleDesktopHello)
 	mux.HandleFunc("/api/desktop/beat", s.handleDesktopBeat)
 	mux.HandleFunc("/api/desktop/bye", s.handleDesktopBye)

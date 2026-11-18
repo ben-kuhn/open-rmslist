@@ -463,6 +463,32 @@ function renderConditions() {
   $("cond-stale").hidden = !c.stale;
 }
 
+async function refreshGateways() {
+  const btn = $("refresh-btn");
+  if (btn) btn.disabled = true;
+  setNote("Refreshing gateway list…");
+  try {
+    const res = await fetchJSON("/api/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (res.status === "refreshing") {
+      setNote("A refresh is already running; reloading shortly.");
+      setTimeout(() => load().catch(() => {}), 6000);
+    } else {
+      setNote("Gateway list refreshed.");
+      await load();
+    }
+  } catch (err) {
+    setNote(err.message.includes("429")
+      ? "Gateway list was refreshed recently; try again in a few minutes."
+      : "Refresh failed: " + err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function setNote(msg) {
   const el = $("cond-note");
   el.textContent = msg || "";
@@ -679,6 +705,7 @@ function wireEvents() {
   $("band").addEventListener("change", (e) => { state.filters.band = e.target.value; clearRank(); });
   $("grid").addEventListener("change", () => { $("grid").value = $("grid").value.trim().toUpperCase(); });
   $("rank-btn").addEventListener("click", doRank);
+  $("refresh-btn").addEventListener("click", refreshGateways);
   $("rank-mode").addEventListener("change", applyFilters);
   $("theme-btn").addEventListener("click", () => applyTheme(state.theme === "dark" ? "light" : "dark"));
 }

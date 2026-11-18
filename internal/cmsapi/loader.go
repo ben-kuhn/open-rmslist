@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ben-kuhn/rms-radar/internal/atomicfile"
@@ -91,7 +92,8 @@ type Loader struct {
 	codesMu sync.RWMutex
 	codes   []string
 
-	refreshMu sync.Mutex
+	refreshMu  sync.Mutex
+	refreshing atomic.Bool
 
 	mu        sync.RWMutex
 	data      []byte
@@ -185,6 +187,8 @@ func (l *Loader) Refresh(ctx context.Context, force bool) error {
 	// background ticker.
 	l.refreshMu.Lock()
 	defer l.refreshMu.Unlock()
+	l.refreshing.Store(true)
+	defer l.refreshing.Store(false)
 
 	if !force {
 		if b, at, ok := l.readCached(); ok {
@@ -251,6 +255,9 @@ func (l *Loader) setError(err error) {
 		l.lastErr = err.Error()
 	}
 }
+
+// Refreshing reports whether a network/cache refresh is currently running.
+func (l *Loader) Refreshing() bool { return l.refreshing.Load() }
 
 // LastError reports why the most recent refresh failed, if it did. The last
 // successful snapshot is kept.

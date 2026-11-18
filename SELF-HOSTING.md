@@ -93,7 +93,7 @@ endpoints are token-guarded and disabled in `-d` service mode.
 |------|-----|---------|-------------|
 | `-listen` | `RMSRADAR_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
 | `-service-codes` | `RMSRADAR_SERVICE_CODES` | `PUBLIC,EMCOMM` | Comma-separated service codes to fetch (no wildcard) |
-| `-refresh` | `RMSRADAR_REFRESH` | `1h` | Gateway list refresh interval |
+| `-refresh` | `RMSRADAR_REFRESH` | `24h` | Gateway list refresh interval; the UI **Refresh** button forces an update (five-minute cooldown) |
 | `-cache-dir` | `RMSRADAR_CACHE_DIR` | `./data` | Cache directory |
 | `-key` | `RMSRADAR_KEY` | Pat's community key | Winlink CMS access key |
 | `-admin-token` | `RMSRADAR_ADMIN_TOKEN` | *(empty)* | Enables service-code changes and requires this value in the `X-RMS-Radar-Admin` header |
@@ -281,12 +281,15 @@ workflow publishes its checksum next to it.
 | `GET /api/conditions` | Current solar + MUF summary |
 | `POST /api/rank` | Ranked stations for a grid/band/mode |
 | `GET /api/config` | Service codes, version, VOACAP status, tile URL, editing flag |
+| `POST /api/refresh` | Force a gateway refresh (same-origin JSON; five-minute cooldown) |
 | `POST /api/servicecodes/config` | Change the fetched codes (desktop same-origin, or `X-RMS-Radar-Admin` on a server) |
 
 ## Offline behavior
 
-1. The gateway list is cached to `-cache-dir`. If the network is unavailable on a
-   later start, the cache is served.
+1. The gateway list is cached to `-cache-dir`. It refreshes once a day and can
+   be refreshed immediately with the **Refresh** button (rate-limited to one
+   request per five minutes). If the network is unavailable on a later start,
+   the cache is served.
 2. If there is no cache, an embedded snapshot (bundled in the binary) is used.
 3. Propagation conditions are cached too; ranking degrades to a
    distance/band-based estimate when no ionospheric data is available.
