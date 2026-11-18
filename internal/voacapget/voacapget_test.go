@@ -383,11 +383,11 @@ func TestDefaultURL(t *testing.T) {
 }
 
 func TestVerifyMinisign(t *testing.T) {
-	payload := []byte("voacap test payload")
-	sig := []byte("untrusted comment: test\n" +
-		"RUQoKUnh2RVOrDCgwCf3N9RIMczqsCqqtSH7ihnKf5Uz8oLzTaACM1vtXkNwuByx/GB8p5CVzso8s1JbzPZbWCJx0SHsf2k1HgE=\n" +
-		"trusted comment: timestamp:1794950921\tfile:voacap-test.txt\thashed\n" +
-		"P8Zmvww9h0t6je0ExVAeQMm9lrl/pOKniv8VpH+14q8X614WgIZeMDoS7rEtFCDYBZaW5hUFc/AbV5ln9jRaCg==\n")
+	payload := []byte("voacap test payload v2")
+	sig := []byte("untrusted comment: test v2\n" +
+		"RUS7XOFIwTDVkWLY0j46UYUMmlbe2eg2MRHPpMgYiVxx9mTynm+teI9bR/Ve/ljkWsgKGtY0rwMtunAI7wzyHt18TL0Jzz6Gngk=\n" +
+		"trusted comment: timestamp:1794954702\tfile:voacap-test2.txt\thashed\n" +
+		"7+xT4GUUN3yJKPd4bVuUAmpavPBrKo0PuWiK2cT548DK+PCvR3cIV16KpoSI4JBYwlW6Y3OoBnq5L++75pKQAA==\n")
 	if err := VerifyMinisign(payload, sig); err != nil {
 		t.Fatalf("valid signature rejected: %v", err)
 	}
@@ -396,15 +396,5 @@ func TestVerifyMinisign(t *testing.T) {
 	}
 	if err := VerifyMinisign(payload, []byte("garbage")); err == nil {
 		t.Fatal("garbage signature accepted")
-	}
-
-	// The current signing key is also trusted.
-	payload2 := []byte("voacap test payload v2")
-	sig2 := []byte("untrusted comment: test v2\n" +
-		"RUS7XOFIwTDVkWLY0j46UYUMmlbe2eg2MRHPpMgYiVxx9mTynm+teI9bR/Ve/ljkWsgKGtY0rwMtunAI7wzyHt18TL0Jzz6Gngk=\n" +
-		"trusted comment: timestamp:1794954702\tfile:voacap-test2.txt\thashed\n" +
-		"7+xT4GUUN3yJKPd4bVuUAmpavPBrKo0PuWiK2cT548DK+PCvR3cIV16KpoSI4JBYwlW6Y3OoBnq5L++75pKQAA==\n")
-	if err := VerifyMinisign(payload2, sig2); err != nil {
-		t.Fatalf("current-key signature rejected: %v", err)
 	}
 }

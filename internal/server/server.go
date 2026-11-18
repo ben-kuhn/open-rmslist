@@ -84,9 +84,6 @@ type Server struct {
 
 	// Service-code endpoint admission: a global cooldown and a single-flight
 	// refresh prevent a burst of POSTs from piling up upstream fetches.
-	adminToken            string
-	desktopMode           bool
-	openURL               func(string) error
 	codeChangeMu          sync.Mutex
 	lastCodeChange        time.Time
 	codeChangeMinInterval time.Duration
@@ -97,8 +94,6 @@ type Server struct {
 
 	// Desktop (double-click) lifecycle: the page checks in while it is open,
 	// and the process exits once every page has gone away.
-	desktopToken   string
-	onQuit         func()
 	desktopMu      sync.Mutex
 	desktopClients map[string]time.Time
 	desktopSeen    bool
@@ -106,6 +101,9 @@ type Server struct {
 }
 
 func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heuristic) *Server {
+	if cfg.OpenURL == nil {
+		cfg.OpenURL = browser.Open
+	}
 	// More accurate predictors first; the always-available heuristic is last.
 	var predictors []propagation.Predictor
 	voacapEnabled := false
@@ -138,15 +136,10 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 		tileInFlight: make(map[string]chan struct{}),
 		tileMaxBytes: cfg.TileCacheMaxBytes,
 
-		adminToken:            cfg.AdminToken,
-		desktopMode:           cfg.DesktopMode,
-		openURL:               cfg.OpenURL,
 		codeChangeMinInterval: time.Second,
 		codeRefreshSem:        make(chan struct{}, 1),
 		refreshCooldown:       5 * time.Minute,
 
-		desktopToken:   cfg.DesktopToken,
-		onQuit:         cfg.OnQuit,
 		desktopClients: make(map[string]time.Time),
 	}
 	s.refreshCodes = func(ctx context.Context) error {
@@ -158,13 +151,10 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 	if s.tileMaxBytes <= 0 {
 		s.tileMaxBytes = 512 << 20
 	}
-	if s.openURL == nil {
-		s.openURL = browser.Open
-	}
 	if cfg.TileCacheDir != "" {
 		s.tileBytes = dirSize(cfg.TileCacheDir)
 	}
-	if s.desktopToken != "" {
+	if s.cfg.DesktopToken != "" {
 		go s.monitorDesktop()
 	}
 	return s
@@ -292,6 +282,9 @@ func (s *Server) snapshotStations() []catalog.Station {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if !getOnly(w, r) {
+		return
+	}
 	_, source, at := s.loader.Snapshot()
 	stations := s.snapshotStations()
 	writeJSON(w, map[string]any{
@@ -307,10 +300,16 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGateways(w http.ResponseWriter, r *http.Request) {
+	if !getOnly(w, r) {
+		return
+	}
 	writeJSON(w, s.snapshotStations())
 }
 
 func (s *Server) handleServiceCodes(w http.ResponseWriter, r *http.Request) {
+	if !getOnly(w, r) {
+		return
+	}
 	counts := map[string]int{}
 	for _, st := range s.snapshotStations() {
 		for _, ch := range st.Channels {
@@ -334,19 +333,33 @@ func (s *Server) handleServiceCodes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleConditions(w http.ResponseWriter, r *http.Request) {
+	if !getOnly(w, r) {
+		return
+	}
 	writeJSON(w, s.heuristic.Conditions())
 }
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	if !getOnly(w, r) {
+		return
+	}
 	writeJSON(w, map[string]any{
 		"version":                      s.cfg.Version,
 		"service_codes":                s.loader.ServiceCodes(),
 		"service_codes_editable":       s.serviceCodeEditingEnabled(),
 		"service_codes_token_required": s.serviceCodeTokenRequired(),
-		"desktop":                      s.desktopMode || s.desktopToken != "",
+		"desktop":                      s.cfg.DesktopMode || s.cfg.DesktopToken != "",
 		"voacap":                       s.voacapEnabled,
 		"tile_url":                     proxyTilePath,
 	})
+}
+
+func getOnly(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return false
+	}
+	return true
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

@@ -30,6 +30,19 @@ func clientIP(r *http.Request) string {
 	return remote
 }
 
+// clientKey groups IPv6 clients by /64 so rotating addresses within one
+// allocation does not multiply the per-client budget.
+func clientKey(r *http.Request) string {
+	ip := net.ParseIP(clientIP(r))
+	if ip == nil {
+		return clientIP(r)
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return v4.String()
+	}
+	return ip.Mask(net.CIDRMask(64, 128)).String()
+}
+
 func remoteIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -45,10 +58,11 @@ type tokenBucket struct {
 
 // ipLimiter is a small token bucket keyed by client address.
 type ipLimiter struct {
-	mu      sync.Mutex
-	buckets map[string]*tokenBucket
-	rate    float64
-	burst   float64
+	mu          sync.Mutex
+	buckets     map[string]*tokenBucket
+	rate        float64
+	burst       float64
+	lastCleanup time.Time
 }
 
 func newIPLimiter(rate, burst float64) *ipLimiter {
@@ -63,12 +77,17 @@ func (l *ipLimiter) allow(key string, now time.Time) bool {
 	defer l.mu.Unlock()
 	b := l.buckets[key]
 	if b == nil {
-		// Bound memory if an attacker rotates source addresses.
-		if len(l.buckets) > 10000 {
+		// Bound memory if an attacker rotates source addresses. Scan at most
+		// once a minute, and hard-reset if even the cleanup cannot keep up.
+		if len(l.buckets) > 10000 && now.Sub(l.lastCleanup) >= time.Minute {
 			for k, v := range l.buckets {
 				if now.Sub(v.last) > 10*time.Minute {
 					delete(l.buckets, k)
 				}
+			}
+			l.lastCleanup = now
+			if len(l.buckets) > 50000 {
+				l.buckets = make(map[string]*tokenBucket)
 			}
 		}
 		b = &tokenBucket{tokens: l.burst, last: now}

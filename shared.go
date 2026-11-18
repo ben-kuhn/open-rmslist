@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"embed"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,7 +22,7 @@ import (
 )
 
 // version is overridable at link time via -ldflags "-X main.version=...".
-var version = "0.2.7"
+var version = "0.2.8"
 
 //go:embed all:web
 var webFS embed.FS
@@ -35,7 +37,7 @@ func webFilesystem(dir string) (fs.FS, error) {
 func randomHex(n int) string {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		return fmt.Sprintf("%d", time.Now().UnixNano())
+		panic("crypto/rand: " + err.Error())
 	}
 	return hex.EncodeToString(b)
 }
@@ -52,14 +54,18 @@ func defaultVOACAPDownloadDir() string {
 // paths when no engine is available.
 func initVOACAP(executable, dataDir, downloadURL, downloadDir, downloadSHA, remoteURL, version string, auto bool) (string, string) {
 	if downloadURL != "" && executable == "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		exe, data, err := voacapget.Fetch(ctx, downloadURL, downloadDir, downloadSHA)
-		cancel()
-		if err != nil {
-			log.Printf("voacapl download failed: %v", err)
+		if err := validateVOACAPDownloadURL(downloadURL, downloadSHA); err != nil {
+			log.Printf("voacapl download refused: %v", err)
 		} else {
-			executable, dataDir = exe, data
-			log.Printf("voacapl ready: %s (data %s)", exe, data)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			exe, data, err := voacapget.Fetch(ctx, downloadURL, downloadDir, downloadSHA)
+			cancel()
+			if err != nil {
+				log.Printf("voacapl download failed: %v", err)
+			} else {
+				executable, dataDir = exe, data
+				log.Printf("voacapl ready: %s (data %s)", exe, data)
+			}
 		}
 	}
 	if executable == "" {
@@ -77,6 +83,24 @@ func initVOACAP(executable, dataDir, downloadURL, downloadDir, downloadSHA, remo
 		}
 	}
 	return executable, dataDir
+}
+
+func validateVOACAPDownloadURL(raw, sha string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return nil
+	case "http":
+		if strings.TrimSpace(sha) != "" {
+			return nil
+		}
+		return errors.New("http VOACAP download requires -voacap-download-sha256")
+	default:
+		return fmt.Errorf("unsupported VOACAP download scheme %q", u.Scheme)
+	}
 }
 
 // maybeAutoDownloadVOACAP fetches the signed release bundle for this platform

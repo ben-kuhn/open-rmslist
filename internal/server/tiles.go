@@ -2,6 +2,7 @@ package server
 
 import (
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,47 +33,51 @@ func (s *Server) handleTiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid tile coordinates", http.StatusBadRequest)
 		return
 	}
-	if !s.tileLimiter.allow(clientIP(r), time.Now()) {
+	if !s.tileLimiter.allow(clientKey(r), time.Now()) {
 		w.Header().Set("Retry-After", "1")
 		http.Error(w, "tile rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
 
-	cachePath := filepath.Join(s.cfg.TileCacheDir, strconv.Itoa(z), strconv.Itoa(x), strconv.Itoa(y)+".png")
-	if b, err := os.ReadFile(cachePath); err == nil && len(b) > 0 {
-		serveTile(w, b)
-		return
-	}
-
-	// Coalesce concurrent misses for the same tile: one request fetches, the
-	// rest wait and read the cached result.
-	s.tileMu.Lock()
-	wait, busy := s.tileInFlight[cachePath]
-	if !busy {
-		wait = make(chan struct{})
-		s.tileInFlight[cachePath] = wait
-	}
-	s.tileMu.Unlock()
-	if busy {
-		select {
-		case <-wait:
-		case <-r.Context().Done():
-			http.Error(w, "request canceled", http.StatusRequestTimeout)
-			return
-		}
+	cacheEnabled := s.cfg.TileCacheDir != ""
+	cachePath := ""
+	if cacheEnabled {
+		cachePath = filepath.Join(s.cfg.TileCacheDir, strconv.Itoa(z), strconv.Itoa(x), strconv.Itoa(y)+".png")
 		if b, err := os.ReadFile(cachePath); err == nil && len(b) > 0 {
 			serveTile(w, b)
 			return
 		}
-		http.Error(w, "tile upstream error", http.StatusBadGateway)
-		return
-	}
-	defer func() {
+
+		// Coalesce concurrent misses for the same tile: one request fetches,
+		// the rest wait and read the cached result.
 		s.tileMu.Lock()
-		delete(s.tileInFlight, cachePath)
-		close(wait)
+		wait, busy := s.tileInFlight[cachePath]
+		if !busy {
+			wait = make(chan struct{})
+			s.tileInFlight[cachePath] = wait
+		}
 		s.tileMu.Unlock()
-	}()
+		if busy {
+			select {
+			case <-wait:
+			case <-r.Context().Done():
+				http.Error(w, "request canceled", http.StatusRequestTimeout)
+				return
+			}
+			if b, err := os.ReadFile(cachePath); err == nil && len(b) > 0 {
+				serveTile(w, b)
+				return
+			}
+			http.Error(w, "tile upstream error", http.StatusBadGateway)
+			return
+		}
+		defer func() {
+			s.tileMu.Lock()
+			delete(s.tileInFlight, cachePath)
+			close(wait)
+			s.tileMu.Unlock()
+		}()
+	}
 
 	select {
 	case s.tileSem <- struct{}{}:
@@ -116,7 +121,16 @@ func (s *Server) handleTiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "tile upstream error", http.StatusBadGateway)
 		return
 	}
-	if s.cfg.TileCacheDir != "" {
+	ct := resp.Header.Get("Content-Type")
+	if ct == "" {
+		ct = http.DetectContentType(b)
+	}
+	mt, _, ctErr := mime.ParseMediaType(ct)
+	if ctErr != nil || !strings.HasPrefix(strings.ToLower(mt), "image/") {
+		http.Error(w, "tile upstream error", http.StatusBadGateway)
+		return
+	}
+	if cacheEnabled {
 		_ = os.MkdirAll(filepath.Dir(cachePath), 0o755)
 		if tmp, err := os.CreateTemp(filepath.Dir(cachePath), ".tile-*"); err == nil {
 			name := tmp.Name()

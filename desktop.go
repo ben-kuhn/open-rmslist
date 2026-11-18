@@ -11,10 +11,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"github.com/ben-kuhn/rms-radar/internal/app"
-	"github.com/ben-kuhn/rms-radar/internal/cmsapi"
 	webview "github.com/webview/webview_go"
 )
 
@@ -22,28 +20,21 @@ import (
 // WebKitGTK 4.1 (Linux), WebView2 (Windows), WKWebView (macOS). The window
 // hosts the same local server and UI as the web binary; closing it exits.
 func main() {
-	var (
-		addr         = flag.String("listen", envOr("RMSRADAR_LISTEN", "127.0.0.1:0"), "local listen address (default: an ephemeral localhost port)")
-		serviceCodes = flag.String("service-codes", envOr("RMSRADAR_SERVICE_CODES", defaultServiceCodesCSV()), "comma-separated Winlink service codes to fetch (the API accepts explicit codes; there is no wildcard)")
-		refresh      = flag.Duration("refresh", envDuration("RMSRADAR_REFRESH", 24*time.Hour), "gateway list refresh interval (daily by default; the UI Refresh button forces an update)")
-		cacheDir     = flag.String("cache-dir", envOr("RMSRADAR_CACHE_DIR", defaultDesktopCacheDir()), "cache directory for gateway list, tiles, and logs")
-		accessKey    = flag.String("key", envOr("RMSRADAR_KEY", cmsapi.DefaultAccessKey), "Winlink CMS access key")
-		historyHours = flag.Int("history-hours", envInt("RMSRADAR_HISTORY_HOURS", 48), "hours of channel history to fetch (1-48)")
-		voacapURL    = flag.String("voacap-url", envOr("RMSRADAR_VOACAP_URL", ""), "optional remote VOACAP API base URL (enables forecasts when set)")
-		voacapExec   = flag.String("voacap-executable", envOr("RMSRADAR_VOACAP_EXECUTABLE", ""), "path to a local voacapl/voacapw binary (enables forecasts)")
-		voacapData   = flag.String("voacap-data-dir", envOr("RMSRADAR_VOACAP_DATA_DIR", ""), "ITSHFBC data directory for the local VOACAP binary")
-		voacapDlURL  = flag.String("voacap-download-url", envOr("RMSRADAR_VOACAP_DOWNLOAD_URL", ""), "download a VOACAP distribution (binary + itshfbc data) from this URL (opt-in; no package manager required)")
-		voacapDlDir  = flag.String("voacap-download-dir", envOr("RMSRADAR_VOACAP_DOWNLOAD_DIR", defaultVOACAPDownloadDir()), "directory to extract a downloaded VOACAP distribution into")
-		voacapDlSum  = flag.String("voacap-download-sha256", envOr("RMSRADAR_VOACAP_DOWNLOAD_SHA256", ""), "optional SHA-256 of the VOACAP distribution archive")
-		adminToken   = flag.String("admin-token", envOr("RMSRADAR_ADMIN_TOKEN", ""), "admin token required in the X-RMS-Radar-Admin header to change service codes (also enables the endpoint in server mode)")
-		voacapAuto   = flag.Bool("voacap-auto", envBool("RMSRADAR_VOACAP_AUTO", true), "automatically download the RMS Radar VOACAP bundle when no engine is installed")
-		webDir       = flag.String("web-dir", envOr("RMSRADAR_WEB_DIR", ""), "serve web assets from this directory instead of the embedded copy")
-		tileURL      = flag.String("tile-url", envOr("RMSRADAR_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"), "upstream tile URL template proxied+cached by the server (OSM by default)")
-		tileCacheMax = flag.Int("tile-cache-max", envInt("RMSRADAR_TILE_CACHE_MAX_MB", 512), "tile cache quota in MiB (set a very large value to disable eviction)")
-		vhfRange     = flag.Float64("vhf-max-range", envFloat("RMSRADAR_VHF_MAX_RANGE", 400), "max plausible VHF/UHF (>=30 MHz) path length in km for ranking (distance-based; set large to effectively disable)")
-		debug        = flag.Bool("debug", envBool("RMSRADAR_DEBUG", false), "enable the webview developer tools")
+	cf := registerCommonFlags(
+		"127.0.0.1:0",
+		defaultDesktopCacheDir(),
+		"local listen address (default: an ephemeral localhost port)",
+		"cache directory for gateway list, tiles, and logs",
+		true,
 	)
+	debug := flag.Bool("debug", envBool("RMSRADAR_DEBUG", false), "enable the webview developer tools")
 	flag.Parse()
+	addr, serviceCodes, refresh, cacheDir := cf.Listen, cf.ServiceCodes, cf.Refresh, cf.CacheDir
+	accessKey, historyHours := cf.AccessKey, cf.HistoryHours
+	voacapURL, voacapExec, voacapData := cf.VOACAPURL, cf.VOACAPExecutable, cf.VOACAPDataDir
+	voacapDlURL, voacapDlDir, voacapDlSum := cf.VOACAPDownloadURL, cf.VOACAPDownloadDir, cf.VOACAPDownloadSHA256
+	adminToken, voacapAuto := cf.AdminToken, cf.VOACAPAuto
+	webDir, tileURL, tileCacheMax, vhfRange := cf.WebDir, cf.TileURL, cf.TileCacheMax, cf.VHFRange
 
 	// Native builds have no console on Windows, so also write logs to the cache.
 	if err := os.MkdirAll(*cacheDir, 0o755); err == nil {

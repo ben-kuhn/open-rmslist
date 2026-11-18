@@ -42,6 +42,21 @@ func TestClientGate(t *testing.T) {
 	}
 }
 
+func TestClientKeyIPv6(t *testing.T) {
+	a := httptest.NewRequest("GET", "/", nil)
+	a.RemoteAddr = "[2001:db8:1234:5678::1]:443"
+	b := httptest.NewRequest("GET", "/", nil)
+	b.RemoteAddr = "[2001:db8:1234:5678::ffff]:443"
+	if clientKey(a) != clientKey(b) {
+		t.Fatalf("same /64 differs: %q vs %q", clientKey(a), clientKey(b))
+	}
+	c := httptest.NewRequest("GET", "/", nil)
+	c.RemoteAddr = "[2001:db8:1234:5679::1]:443"
+	if clientKey(a) == clientKey(c) {
+		t.Fatal("different /64 collided")
+	}
+}
+
 func TestClientIP(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	req.RemoteAddr = "127.0.0.1:1234"

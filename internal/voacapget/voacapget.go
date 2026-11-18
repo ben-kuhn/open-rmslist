@@ -30,13 +30,11 @@ import (
 	"github.com/jedisct1/go-minisign"
 )
 
-// MinisignPublicKeys are the public halves of the keys accepted for VOACAP
-// bundles. The first was used for the v0.2.4 release; the second is the current
-// signing key. Keeping both lets a new app verify an older pinned bundle during
-// a development fallback. The current private key lives in the repository's
-// VOACAP_MINISIGN_SECRET_KEY Actions secret (and must be backed up offline).
+// MinisignPublicKeys are the public halves accepted for VOACAP bundles. The
+// retired v0.2.4 key is intentionally no longer trusted. The current private
+// key lives in the repository's VOACAP_MINISIGN_SECRET_KEY Actions secret (and
+// must be backed up offline).
 var MinisignPublicKeys = []string{
-	"RWQoKUnh2RVOrHnNGpIBq61ECRNk8+eL93Sn5dhdm2te75Zz7lOkUSZt",
 	"RWS7XOFIwTDVkQ7duMqIyyJ4Zv/ZLiMflNx+2+bvSZ767iDtEuszSJs7",
 }
 
@@ -289,9 +287,14 @@ func download(ctx context.Context, url, destDir string) (string, error) {
 		return "", err
 	}
 	n, err := io.Copy(tmp, io.LimitReader(resp.Body, maxDownloadBytes+1))
-	tmp.Close()
+	cerr := tmp.Close()
 	if err != nil {
+		os.Remove(tmp.Name())
 		return "", err
+	}
+	if cerr != nil {
+		os.Remove(tmp.Name())
+		return "", cerr
 	}
 	if n > maxDownloadBytes {
 		os.Remove(tmp.Name())

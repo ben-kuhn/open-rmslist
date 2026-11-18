@@ -79,7 +79,7 @@ func (p *voacapLocal) Predict(ctx context.Context, params Params) (*Prediction, 
 	runDir := filepath.Join(p.dataDir, "run")
 	args := []string{p.dataDir, inputName, outputName}
 	if isVoacapl(p.executable) {
-		dir, err := os.MkdirTemp("", "rmslist-voacap-")
+		dir, err := os.MkdirTemp("", "rms-radar-voacap-")
 		if err != nil {
 			return nil, err
 		}
@@ -161,8 +161,7 @@ func (p *voacapAPI) Predict(ctx context.Context, params Params) (*Prediction, er
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("voacap API %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("voacap API %d", resp.StatusCode)
 	}
 	return toPrediction(resp.Body, params)
 }

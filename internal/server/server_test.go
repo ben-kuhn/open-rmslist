@@ -439,6 +439,13 @@ func TestDesktopSession(t *testing.T) {
 	}
 	s.desktopMu.Unlock()
 
+	if got := post("/api/desktop/beat?token=secret&id=a"); got != http.StatusNoContent {
+		t.Errorf("beat: status %d, want 204", got)
+	}
+	if got := post("/api/desktop/beat?token=secret"); got != http.StatusBadRequest {
+		t.Errorf("beat without id: status %d, want 400", got)
+	}
+
 	if got := post("/api/desktop/bye?token=secret&id=a"); got != http.StatusNoContent {
 		t.Errorf("bye: status %d, want 204", got)
 	}
@@ -503,6 +510,7 @@ func TestServiceCodesConfig(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Origin", "http://127.0.0.1:1234")
 		req.Host = "127.0.0.1:1234"
+		req.RemoteAddr = "127.0.0.1:2345"
 		h.ServeHTTP(rec, req)
 		return rec
 	}
@@ -567,6 +575,7 @@ func TestHandleTilesCoalesces(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&calls, 1)
 		<-release
+		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write([]byte("PNGDATA"))
 	}))
 	defer upstream.Close()
@@ -643,6 +652,7 @@ func TestServiceCodesConfigProtections(t *testing.T) {
 		if contentType != "" {
 			req.Header.Set("Content-Type", contentType)
 		}
+		req.RemoteAddr = "127.0.0.1:2345"
 		if origin != "" {
 			req.Header.Set("Origin", origin)
 			if u, err := url.Parse(origin); err == nil {
@@ -676,6 +686,7 @@ func TestServiceCodesConfigProtections(t *testing.T) {
 	rec := httptest.NewRecorder()
 	cross := httptest.NewRequest(http.MethodPost, "/api/servicecodes/config", strings.NewReader(`{"add":"MODEM73"}`))
 	cross.Host = "127.0.0.1:1234"
+	cross.RemoteAddr = "127.0.0.1:2345"
 	cross.Header.Set("Origin", "https://evil.example")
 	cross.Header.Set("Content-Type", "application/json")
 	desktop.Handler().ServeHTTP(rec, cross)
@@ -684,6 +695,18 @@ func TestServiceCodesConfigProtections(t *testing.T) {
 	}
 	if got := post(desktop, `{"add":"MODEM73"}`, "http://127.0.0.1:1234", "application/json", ""); got != http.StatusOK {
 		t.Fatalf("same-origin POST = %d, want 200", got)
+	}
+	// A LAN client can spoof Host/Origin; the client address must be loopback
+	// when no admin token is configured.
+	lan := httptest.NewRecorder()
+	lanReq := httptest.NewRequest(http.MethodPost, "/api/servicecodes/config", strings.NewReader(`{"add":"MODEM73"}`))
+	lanReq.Host = "127.0.0.1:1234"
+	lanReq.RemoteAddr = "192.0.2.50:2345"
+	lanReq.Header.Set("Origin", "http://127.0.0.1:1234")
+	lanReq.Header.Set("Content-Type", "application/json")
+	desktop.Handler().ServeHTTP(lan, lanReq)
+	if lan.Code != http.StatusForbidden {
+		t.Fatalf("LAN Host spoof = %d, want 403", lan.Code)
 	}
 
 	// An admin token is required whenever it is configured.
@@ -715,6 +738,7 @@ func TestServiceCodesConfigRejectsInvalidAndLimits(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Origin", "http://127.0.0.1:1234")
 		req.Host = "127.0.0.1:1234"
+		req.RemoteAddr = "127.0.0.1:2345"
 		s.Handler().ServeHTTP(rec, req)
 		return rec.Code
 	}
@@ -784,6 +808,7 @@ func TestServiceCodeRefreshCoalesced(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/api/servicecodes/config", strings.NewReader(body))
 		req.Host = "127.0.0.1:1234"
+		req.RemoteAddr = "127.0.0.1:2345"
 		req.Header.Set("Origin", "http://127.0.0.1:1234")
 		req.Header.Set("Content-Type", "application/json")
 		s.Handler().ServeHTTP(rec, req)
@@ -815,10 +840,12 @@ func TestTileHandlerEviction(t *testing.T) {
 	payload := make([]byte, 400)
 	copy(payload, "\x89PNG")
 	s.tileClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		h := make(http.Header)
+		h.Set("Content-Type", "image/png")
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(bytes.NewReader(payload)),
-			Header:     make(http.Header),
+			Header:     h,
 		}, nil
 	})}
 	for x := 0; x < 6; x++ {
@@ -832,5 +859,42 @@ func TestTileHandlerEviction(t *testing.T) {
 	}
 	if got := dirSize(dir); got > s.tileMaxBytes {
 		t.Fatalf("tile cache size = %d, over quota %d", got, s.tileMaxBytes)
+	}
+}
+
+func TestTileRejectsNonImage(t *testing.T) {
+	s := newTestServer(t, nil)
+	s.cfg.TileURL = "https://tiles.example/{z}/{x}/{y}.png"
+	s.tileClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		h := make(http.Header)
+		h.Set("Content-Type", "text/html")
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("<html>")), Header: h}, nil
+	})}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/tiles/3/0/0.png", nil)
+	req.RemoteAddr = "192.0.2.1:1234"
+	s.handleTiles(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("non-image tile = %d, want 502", rec.Code)
+	}
+}
+
+func TestReadEndpointsAreGETOnly(t *testing.T) {
+	s := newTestServer(t, nil)
+	for _, path := range []string{"/api/health", "/api/gateways", "/api/servicecodes", "/api/conditions", "/api/config"} {
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("POST %s = %d, want 405", path, rec.Code)
+		}
+	}
+}
+
+func TestRankRejectsGET(t *testing.T) {
+	s := newTestServer(t, fixture())
+	rec := httptest.NewRecorder()
+	s.handleRank(rec, httptest.NewRequest(http.MethodGet, "/api/rank?grid=EM38xx", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET rank = %d, want 405", rec.Code)
 	}
 }

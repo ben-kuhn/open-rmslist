@@ -72,7 +72,7 @@ func (c *Client) Fetch(ctx context.Context, serviceCodes []string, historyHours 
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", "rms-radar/0.1 (+https://github.com/ben-kuhn/rms-radar)")
+	req.Header.Set("User-Agent", "rms-radar (+https://github.com/ben-kuhn/rms-radar)")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.HTTP.Do(req)

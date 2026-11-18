@@ -126,11 +126,11 @@ func (s *Server) handleServiceCodesConfig(w http.ResponseWriter, r *http.Request
 const adminTokenHeader = "X-RMS-Radar-Admin"
 
 func (s *Server) serviceCodeEditingEnabled() bool {
-	return s.adminToken != "" || s.desktopMode || s.desktopToken != ""
+	return s.cfg.AdminToken != "" || s.cfg.DesktopMode || s.cfg.DesktopToken != ""
 }
 
 func (s *Server) serviceCodeTokenRequired() bool {
-	return s.adminToken != ""
+	return s.cfg.AdminToken != ""
 }
 
 // validServiceCodeRequest enforces an authenticated, same-origin JSON request.
@@ -143,9 +143,9 @@ func (s *Server) validServiceCodeRequest(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
 		return false
 	}
-	if s.adminToken != "" {
+	if s.cfg.AdminToken != "" {
 		got := r.Header.Get(adminTokenHeader)
-		if subtle.ConstantTimeCompare([]byte(got), []byte(s.adminToken)) != 1 {
+		if subtle.ConstantTimeCompare([]byte(got), []byte(s.cfg.AdminToken)) != 1 {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return false
 		}
@@ -161,9 +161,10 @@ func (s *Server) sameOrigin(r *http.Request) bool {
 	if !originHostMatches(r) {
 		return false
 	}
-	// Without an admin token, also require a loopback Host. This blocks DNS
-	// rebinding from a public hostname to the desktop server.
-	return s.adminToken != "" || isLocalHost(r.Host)
+	// Without an admin token, require both a loopback Host and a loopback
+	// client. The Host check blocks DNS rebinding; the client check stops a LAN
+	// host from spoofing "Host: 127.0.0.1" and editing a desktop instance.
+	return s.cfg.AdminToken != "" || (isLocalHost(r.Host) && isLoopbackRemote(r))
 }
 
 func originHostMatches(r *http.Request) bool {
@@ -179,6 +180,11 @@ func originHostMatches(r *http.Request) bool {
 		return false
 	}
 	return strings.EqualFold(u.Host, r.Host)
+}
+
+func isLoopbackRemote(r *http.Request) bool {
+	ip := net.ParseIP(remoteIP(r))
+	return ip != nil && ip.IsLoopback()
 }
 
 func isLocalHost(host string) bool {

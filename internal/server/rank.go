@@ -39,7 +39,7 @@ type rankedEntry struct {
 	Note        string  `json:"note,omitempty"`
 }
 
-// Per-request rank deadlines. main.go sets WriteTimeout to
+// Per-request rank deadlines. app.go sets WriteTimeout to
 // RankTimeoutVOACAP + a margin, so the HTTP write always outlives the rank.
 const (
 	RankTimeoutHeuristic = 120 * time.Second
@@ -51,36 +51,28 @@ const (
 const maxRankCandidates = 500
 
 func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
-	grid := r.URL.Query().Get("grid")
-	band := r.URL.Query().Get("band")
-	mode := r.URL.Query().Get("mode")
-	sc := r.URL.Query().Get("service_code")
-
-	switch r.Method {
-	case http.MethodGet:
-	case http.MethodPost:
-		var rr struct {
-			Grid        string `json:"grid"`
-			Band        string `json:"band"`
-			Mode        string `json:"mode"`
-			ServiceCode string `json:"service_code"`
-		}
-		body := http.MaxBytesReader(w, r.Body, 1<<20)
-		dec := json.NewDecoder(body)
-		if err := dec.Decode(&rr); err != nil {
-			http.Error(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
-			return
-		}
-		var extra any
-		if err := dec.Decode(&extra); err != io.EOF {
-			http.Error(w, "unexpected trailing data", http.StatusBadRequest)
-			return
-		}
-		grid, band, mode, sc = rr.Grid, rr.Band, rr.Mode, rr.ServiceCode
-	default:
+	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	var rr struct {
+		Grid        string `json:"grid"`
+		Band        string `json:"band"`
+		Mode        string `json:"mode"`
+		ServiceCode string `json:"service_code"`
+	}
+	body := http.MaxBytesReader(w, r.Body, 1<<20)
+	dec := json.NewDecoder(body)
+	if err := dec.Decode(&rr); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		http.Error(w, "unexpected trailing data", http.StatusBadRequest)
+		return
+	}
+	grid, band, mode, sc := rr.Grid, rr.Band, rr.Mode, rr.ServiceCode
 
 	from, err := propagation.ParseLocator(grid)
 	if err != nil {
@@ -90,7 +82,7 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 
 	// Fairness: one active ranking per client. This keeps a single client from
 	// holding both global slots for the full VOACAP deadline.
-	client := clientIP(r)
+	client := clientKey(r)
 	if !s.rankClients.acquire(client) {
 		w.Header().Set("Retry-After", "5")
 		http.Error(w, "ranking is already running for this client", http.StatusTooManyRequests)

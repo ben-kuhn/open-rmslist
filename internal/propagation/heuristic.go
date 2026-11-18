@@ -466,6 +466,9 @@ func (h *Heuristic) saveCached(c Conditions, iono []Ionosonde) {
 }
 
 func (h *Heuristic) loadCached() (Conditions, []Ionosonde, error) {
+	if h.cacheDir == "" {
+		return Conditions{}, nil, fmt.Errorf("no cache directory")
+	}
 	b, err := os.ReadFile(h.cachePath())
 	if err != nil {
 		return Conditions{}, nil, err

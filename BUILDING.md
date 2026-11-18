@@ -88,9 +88,9 @@ The `v*` tag release workflow builds the web artifacts on Ubuntu, the native
 desktop artifacts on Linux/macOS/Windows runners, the self-contained VOACAP
 engine bundles for Linux/macOS/Windows, signs the bundles, then publishes
 everything with a combined `SHA256SUMS`. Signing requires the
-`VOACAP_MINISIGN_SECRET_KEY` Actions secret; public keys are embedded in
-`internal/voacapget`. Keep an offline backup of the secret. The v0.2.4 key is
-retained for pinned v0.2.4 bundles; later releases use the current key.
+`VOACAP_MINISIGN_SECRET_KEY` Actions secret; the public key is embedded in
+`internal/voacapget`. Keep an offline backup of the secret. The retired v0.2.4
+key is no longer trusted; v0.2.6 and later bundles use the current key.
 
 ## CI/CD
 

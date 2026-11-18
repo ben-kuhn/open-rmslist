@@ -166,8 +166,6 @@ func Start(parent context.Context, cfg Config) (*App, error) {
 	return a, nil
 }
 
-// serviceCodesFromDisk uses the persisted runtime list when present, otherwise
-// the configured seed list.
 func sameServiceCodes(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

@@ -22,7 +22,7 @@ const (
 )
 
 func (s *Server) desktopAuthorized(w http.ResponseWriter, r *http.Request) bool {
-	if s.desktopToken == "" {
+	if s.cfg.DesktopToken == "" {
 		http.NotFound(w, r)
 		return false
 	}
@@ -31,7 +31,7 @@ func (s *Server) desktopAuthorized(w http.ResponseWriter, r *http.Request) bool 
 		return false
 	}
 	got := r.URL.Query().Get("token")
-	if subtle.ConstantTimeCompare([]byte(got), []byte(s.desktopToken)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(got), []byte(s.cfg.DesktopToken)) != 1 {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return false
 	}
@@ -76,8 +76,8 @@ func (s *Server) monitorDesktop() {
 			!s.desktopEmptyAt.IsZero() && now.Sub(s.desktopEmptyAt) > desktopGrace
 		s.desktopMu.Unlock()
 		if quit {
-			if s.onQuit != nil {
-				s.onQuit()
+			if s.cfg.OnQuit != nil {
+				s.cfg.OnQuit()
 			}
 			return
 		}
@@ -123,8 +123,8 @@ func (s *Server) handleDesktopQuit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-	if s.onQuit != nil {
-		go s.onQuit()
+	if s.cfg.OnQuit != nil {
+		go s.cfg.OnQuit()
 	}
 }
 
@@ -133,7 +133,7 @@ func (s *Server) handleDesktopQuit(w http.ResponseWriter, r *http.Request) {
 // reliably, so the desktop UI calls this endpoint instead. Only two fixed pages
 // are allowed, and the endpoint exists only in desktop mode.
 func (s *Server) handleDesktopOpen(w http.ResponseWriter, r *http.Request) {
-	if !s.desktopMode && s.desktopToken == "" {
+	if !s.cfg.DesktopMode && s.cfg.DesktopToken == "" {
 		http.NotFound(w, r)
 		return
 	}
@@ -169,7 +169,7 @@ func (s *Server) handleDesktopOpen(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown documentation page", http.StatusBadRequest)
 		return
 	}
-	if err := s.openURL(url); err != nil {
+	if err := s.cfg.OpenURL(url); err != nil {
 		log.Printf("open documentation: %v", err)
 		http.Error(w, "could not open documentation", http.StatusBadGateway)
 		return
