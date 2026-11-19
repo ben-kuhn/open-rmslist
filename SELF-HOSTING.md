@@ -40,7 +40,7 @@ services.rms-radar = {
   enable = true;
   listenAddress = "0.0.0.0";
   port = 8079;
-  serviceCodes = [ "PUBLIC" "MERCURY" "VARDEFM" "MODEM73" "DATA2G" "IONHF" ];
+  serviceCodes = [ "PUBLIC" "EMCOMM" "MERCURY" "VARDEFM" "MODEM73" "DATA2G" "IONHF" ];
 };
 ```
 
@@ -92,7 +92,7 @@ endpoints are token-guarded and disabled in `-d` service mode.
 | Flag | Env | Default | Description |
 |------|-----|---------|-------------|
 | `-listen` | `RMSRADAR_LISTEN` | `127.0.0.1:8079` | HTTP listen address (use `0.0.0.0:8079` to serve the LAN) |
-| `-service-codes` | `RMSRADAR_SERVICE_CODES` | `PUBLIC,MERCURY,VARDEFM,MODEM73,DATA2G,IONHF` | Comma-separated service codes to fetch (no wildcard) |
+| `-service-codes` | `RMSRADAR_SERVICE_CODES` | `PUBLIC,EMCOMM,MERCURY,VARDEFM,MODEM73,DATA2G,IONHF` | Comma-separated service codes to fetch (no wildcard) |
 | `-refresh` | `RMSRADAR_REFRESH` | `24h` | Gateway list refresh interval; the UI **Refresh** button forces an update (five-minute cooldown) |
 | `-cache-dir` | `RMSRADAR_CACHE_DIR` | `./data` | Cache directory |
 | `-key` | `RMSRADAR_KEY` | Pat's community key | Winlink CMS access key |
@@ -136,6 +136,7 @@ known community codes:
 | `VARDEFM` | VardeFM gateways (community) |
 | `MODEM73` | Modem73 gateways (community) |
 | `DATA2G` | Data2G gateways (community) |
+| `EMCOMM` | emergency gateways that do not allow public access |
 | `IONHF` | IONHF gateways (community) |
 | *other* | any community or private group code |
 

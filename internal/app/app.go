@@ -189,6 +189,7 @@ func isPreviousServiceDefault(codes []string) bool {
 		{"EMCOMM", "MERCURY", "PUBLIC"},
 		{"EMCOMM", "MERCURY", "PUBLIC", "VARDEFM"},
 		{"DATA2G", "EMCOMM", "MERCURY", "MODEM73", "PUBLIC", "VARDEFM"},
+		{"DATA2G", "IONHF", "MERCURY", "MODEM73", "PUBLIC", "VARDEFM"},
 	}
 	for _, p := range previous {
 		if sameServiceCodes(codes, p) {

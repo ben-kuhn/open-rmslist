@@ -118,8 +118,8 @@ func TestServiceCodesFromDiskMigratesDefaults(t *testing.T) {
 	if _, ok := indexOf(got, "IONHF"); !ok {
 		t.Fatalf("IONHF missing after migration: %v", got)
 	}
-	if _, ok := indexOf(got, "EMCOMM"); ok {
-		t.Fatalf("EMCOMM still present after migration: %v", got)
+	if _, ok := indexOf(got, "EMCOMM"); !ok {
+		t.Fatalf("EMCOMM missing from the full default set: %v", got)
 	}
 
 	// CarKit was observed with EMCOMM/MERCURY/PUBLIC and an existing seed marker
@@ -135,8 +135,8 @@ func TestServiceCodesFromDiskMigratesDefaults(t *testing.T) {
 	if !sameServiceCodes(got, fallback) {
 		t.Fatalf("CarKit legacy list was not migrated: %v", got)
 	}
-	if _, ok := indexOf(got, "EMCOMM"); ok {
-		t.Fatalf("CarKit still has EMCOMM: %v", got)
+	if _, ok := indexOf(got, "IONHF"); !ok {
+		t.Fatalf("CarKit missing IONHF: %v", got)
 	}
 
 	// A custom selection is preserved on first use of the marker.
