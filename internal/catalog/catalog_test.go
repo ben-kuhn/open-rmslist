@@ -108,7 +108,6 @@ func TestCommunityModemLabels(t *testing.T) {
 		{"MERCURY", "ARDOP 2000", "ARDOP 2000"},
 		{"VARDEFM", "Packet 1200", "Packet 1200"},
 		// Access codes keep the reported mode.
-		{"EMCOMM", "ARDOP 2000", "ARDOP 2000"},
 		{"PUBLIC", "VARA 500", "VARA 500"},
 	}
 	for _, c := range cases {

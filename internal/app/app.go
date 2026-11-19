@@ -180,8 +180,8 @@ func sameServiceCodes(a, b []string) bool {
 
 func isPreviousServiceDefault(codes []string) bool {
 	// Sorted forms of every default set used before 0.2.9. The three-code
-	// EMCOMM/MERCURY/PUBLIC entry was observed on an older CarKit desktop
-	// install and is included so that one-time migration can reach it.
+	// MERCURY/PUBLIC entry was observed on an older CarKit desktop install and
+	// is included so that one-time migration can reach it.
 	previous := [][]string{
 		{"EMCOMM", "PUBLIC"},
 		{"MERCURY", "PUBLIC"},
@@ -190,6 +190,7 @@ func isPreviousServiceDefault(codes []string) bool {
 		{"EMCOMM", "MERCURY", "PUBLIC", "VARDEFM"},
 		{"DATA2G", "EMCOMM", "MERCURY", "MODEM73", "PUBLIC", "VARDEFM"},
 		{"DATA2G", "IONHF", "MERCURY", "MODEM73", "PUBLIC", "VARDEFM"},
+		{"DATA2G", "EMCOMM", "IONHF", "MERCURY", "MODEM73", "PUBLIC", "VARDEFM"},
 	}
 	for _, p := range previous {
 		if sameServiceCodes(codes, p) {

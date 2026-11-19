@@ -12,7 +12,7 @@ import (
 // label shown in the mode column. The API advertises these channels under the
 // modem's underlying protocol (for example VARA), so the service code is the
 // reliable identity. Matching the advertised mode string would be fragile.
-// Codes not listed here (PUBLIC, EMCOMM, private groups) keep the reported mode.
+// Codes not listed here (PUBLIC, private groups) keep the reported mode.
 var CommunityModems = map[string]string{
 	"MERCURY": "Mercury",
 	"VARDEFM": "VardeFM",

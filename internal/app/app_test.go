@@ -93,11 +93,11 @@ func TestServiceCodesFromDiskMigratesDefaults(t *testing.T) {
 	}
 
 	// After the marker exists, an explicit choice of the old set is respected.
-	if err := os.WriteFile(path, []byte(`["PUBLIC","EMCOMM"]`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`["MERCURY","PUBLIC"]`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got = serviceCodesFromDisk(path, fallback)
-	if len(got) != 2 || got[0] != "EMCOMM" || got[1] != "PUBLIC" {
+	if len(got) != 2 || got[0] != "MERCURY" || got[1] != "PUBLIC" {
 		t.Fatalf("explicit choice was overwritten: %v", got)
 	}
 
@@ -118,8 +118,27 @@ func TestServiceCodesFromDiskMigratesDefaults(t *testing.T) {
 	if _, ok := indexOf(got, "IONHF"); !ok {
 		t.Fatalf("IONHF missing after migration: %v", got)
 	}
-	if _, ok := indexOf(got, "EMCOMM"); !ok {
-		t.Fatalf("EMCOMM missing from the full default set: %v", got)
+	if _, ok := indexOf(got, "EMCOMM"); ok {
+		t.Fatalf("EMCOMM should not be in the default set: %v", got)
+	}
+
+	// The seven-code default briefly shipped with EMCOMM in 1.0.x. It must
+	// migrate to the current six-code default rather than persisting EMCOMM.
+	if err := os.Remove(seedMarker); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(legacyMarker); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`["DATA2G","EMCOMM","IONHF","MERCURY","MODEM73","PUBLIC","VARDEFM"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = serviceCodesFromDisk(path, fallback)
+	if !sameServiceCodes(got, fallback) {
+		t.Fatalf("seven-code default with EMCOMM was not migrated: %v", got)
+	}
+	if _, ok := indexOf(got, "EMCOMM"); ok {
+		t.Fatalf("EMCOMM survived migration: %v", got)
 	}
 
 	// CarKit was observed with EMCOMM/MERCURY/PUBLIC and an existing seed marker

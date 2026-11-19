@@ -87,7 +87,7 @@ for `.deb`, `.rpm`, Arch, NixOS, and Docker details.
 1. **Enter your grid square** (for example `EM38xx`). Not sure? Use a
    [Maidenhead locator tool](https://www.levinecentral.com/ham/grid_square.php).
 2. **Pick a service code** — `PUBLIC` is the usual open amateur code.
-   `EMCOMM`, `IONHF`, `MERCURY`, `VARDEFM`, `MODEM73`, and `DATA2G` are common
+   `IONHF`, `MERCURY`, `VARDEFM`, `MODEM73`, and `DATA2G` are common
    community codes; other projects and private groups use their own. You can
    also filter by band and mode.
 3. **Press Rank** to score the gateways by predicted link quality. Each row
@@ -105,7 +105,7 @@ offline.
 ## What it does
 
 - **Maps the live Winlink gateway list** on OpenStreetMap.
-- **Filters by service code** — `PUBLIC`, `EMCOMM`, `IONHF`, `MERCURY`, `VARDEFM`,
+- **Filters by service code** — `PUBLIC`, `IONHF`, `MERCURY`, `VARDEFM`,
   `MODEM73`, `DATA2G`, and any other community or private codes you configure.
 - **Shows the real mode** for every channel. Mercury, VardeFM, IONHF, MODEM73,
   and DATA2G gateways are labelled from their service code, even when Winlink
