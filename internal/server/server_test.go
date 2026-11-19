@@ -326,6 +326,57 @@ func TestHandleTiles(t *testing.T) {
 	}
 }
 
+func TestHandleTilesCachedBypassesRateLimit(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("PNGDATA"))
+	}))
+	defer upstream.Close()
+
+	s := newTestServer(t, nil)
+	s.cfg.TileURL = upstream.URL + "/{z}/{x}/{y}.png"
+
+	rec := httptest.NewRecorder()
+	s.handleTiles(rec, httptest.NewRequest(http.MethodGet, "/tiles/2/1/1.png", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("prime cache: %d %q", rec.Code, rec.Body.String())
+	}
+
+	// A cached tile must be served even when the client has no rate budget
+	// left. Zooming commonly requests more tiles than the burst budget.
+	s.tileLimiter = newIPLimiter(0, 0)
+	for i := 0; i < 5; i++ {
+		rec = httptest.NewRecorder()
+		s.handleTiles(rec, httptest.NewRequest(http.MethodGet, "/tiles/2/1/1.png", nil))
+		if rec.Code != http.StatusOK || rec.Body.String() != "PNGDATA" {
+			t.Fatalf("cached request %d: %d %q", i, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestHandleTilesRateLimitsUpstreamMisses(t *testing.T) {
+	var calls int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("PNGDATA"))
+	}))
+	defer upstream.Close()
+
+	s := newTestServer(t, nil)
+	s.cfg.TileURL = upstream.URL + "/{z}/{x}/{y}.png"
+	s.tileLimiter = newIPLimiter(0, 0)
+
+	rec := httptest.NewRecorder()
+	s.handleTiles(rec, httptest.NewRequest(http.MethodGet, "/tiles/2/1/1.png", nil))
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("miss status = %d, want 429", rec.Code)
+	}
+	if got := atomic.LoadInt32(&calls); got != 0 {
+		t.Fatalf("upstream calls = %d, want 0", got)
+	}
+}
+
 func TestHandleTilesBadPath(t *testing.T) {
 	s := newTestServer(t, nil)
 	for _, p := range []string{"/tiles/2/1.png", "/tiles/x/1/1.png", "/tiles/2/-1/1.png", "/tiles/2/999/999.png", "/tiles/../etc/passwd"} {

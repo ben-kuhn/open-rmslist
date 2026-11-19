@@ -33,12 +33,6 @@ func (s *Server) handleTiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid tile coordinates", http.StatusBadRequest)
 		return
 	}
-	if !s.tileLimiter.allow(clientKey(r), time.Now()) {
-		w.Header().Set("Retry-After", "1")
-		http.Error(w, "tile rate limit exceeded", http.StatusTooManyRequests)
-		return
-	}
-
 	cacheEnabled := s.cfg.TileCacheDir != ""
 	cachePath := ""
 	if cacheEnabled {
@@ -49,15 +43,13 @@ func (s *Server) handleTiles(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Coalesce concurrent misses for the same tile: one request fetches,
-		// the rest wait and read the cached result.
+		// the rest wait and read the cached result. Only the request that will
+		// actually contact the upstream consumes rate-limit budget; cached
+		// tiles and waiters must never be rejected.
 		s.tileMu.Lock()
 		wait, busy := s.tileInFlight[cachePath]
-		if !busy {
-			wait = make(chan struct{})
-			s.tileInFlight[cachePath] = wait
-		}
-		s.tileMu.Unlock()
 		if busy {
+			s.tileMu.Unlock()
 			select {
 			case <-wait:
 			case <-r.Context().Done():
@@ -71,12 +63,25 @@ func (s *Server) handleTiles(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "tile upstream error", http.StatusBadGateway)
 			return
 		}
+		if !s.tileLimiter.allow(clientKey(r), time.Now()) {
+			s.tileMu.Unlock()
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "tile rate limit exceeded", http.StatusTooManyRequests)
+			return
+		}
+		wait = make(chan struct{})
+		s.tileInFlight[cachePath] = wait
+		s.tileMu.Unlock()
 		defer func() {
 			s.tileMu.Lock()
 			delete(s.tileInFlight, cachePath)
 			close(wait)
 			s.tileMu.Unlock()
 		}()
+	} else if !s.tileLimiter.allow(clientKey(r), time.Now()) {
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "tile rate limit exceeded", http.StatusTooManyRequests)
+		return
 	}
 
 	select {

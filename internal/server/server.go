@@ -131,7 +131,7 @@ func New(cfg Config, web fs.FS, loader *cmsapi.Loader, heur *propagation.Heurist
 
 		rankSem:      make(chan struct{}, 2),
 		tileSem:      make(chan struct{}, 8),
-		tileLimiter:  newIPLimiter(10, 20),
+		tileLimiter:  newIPLimiter(20, 60),
 		rankClients:  newClientGate(),
 		tileInFlight: make(map[string]chan struct{}),
 		tileMaxBytes: cfg.TileCacheMaxBytes,

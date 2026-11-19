@@ -67,6 +67,23 @@ function applyTileLayer() {
   const url = (state.config && state.config.tile_url) || DEFAULT_TILES;
   if (baseTiles) map.removeLayer(baseTiles);
   baseTiles = L.tileLayer(url, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map);
+  baseTiles.on("tileerror", (event) => {
+    const tile = event.tile;
+    if (!tile) return;
+    const tries = Number(tile.dataset.tileRetries || "0");
+    if (tries >= 2) return;
+    const src = tile.getAttribute("src");
+    if (!src || src.startsWith("data:")) return;
+    tile.dataset.tileRetries = String(tries + 1);
+    // A zoom can outrun the tile scheduler or hit a transient upstream/rate
+    // limit. Leaflet does not retry failed <img> tiles by itself, so re-request
+    // this one after the token bucket has had time to refill.
+    setTimeout(() => {
+      if (!tile.isConnected) return;
+      tile.removeAttribute("src");
+      tile.src = src;
+    }, 1000 * (tries + 1));
+  });
 }
 
 /* ---------- helpers ---------- */
