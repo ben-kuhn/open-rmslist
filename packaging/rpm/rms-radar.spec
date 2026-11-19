@@ -53,7 +53,6 @@ go build -trimpath -ldflags "-s -w -X main.version=%{version}" -o rms-radar .
 install -Dm755 rms-radar %{buildroot}%{_bindir}/rms-radar
 install -Dm644 packaging/common/rms-radar.service %{buildroot}%{_unitdir}/rms-radar.service
 install -Dm644 contrib/desktop/rms-radar.desktop %{buildroot}%{_datadir}/applications/rms-radar.desktop
-%{_datadir}/icons/hicolor/scalable/apps/rms-radar.svg
 install -Dm644 contrib/desktop/rms-radar.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/rms-radar.svg
 
 %files
