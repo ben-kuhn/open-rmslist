@@ -65,12 +65,25 @@
         </div>
         <div class="card download-card">
           <h3>Linux</h3>
-          <p class="meta">x86-64 · tarball / .deb</p>
-          <p>Native WebKitGTK app for the desktop, or install the Debian package.</p>
+          <p class="meta">Desktop · Debian · RPM · Arch</p>
+          <p>Native WebKitGTK app, or the server package for your distribution.</p>
           <a class="btn primary" href="https://github.com/ben-kuhn/rms-radar/releases/latest"
-             data-asset-prefix="rms-radar-desktop-" data-asset-suffix="-linux-amd64.tar.gz">Download for Linux</a>
-          <a class="sub-link" href="https://github.com/ben-kuhn/rms-radar/releases/latest"
-             data-asset-prefix="rms-radar-desktop_" data-asset-suffix="_amd64.deb">Debian package</a>
+             data-asset-prefix="rms-radar-desktop-" data-asset-suffix="-linux-amd64.tar.gz">Desktop tarball</a>
+          <ul class="download-list">
+            <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+                   data-asset-prefix="rms-radar-desktop_" data-asset-suffix="_amd64.deb">Desktop .deb · amd64</a></li>
+            <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+                   data-asset-prefix="rms-radar_" data-asset-suffix="_amd64.deb">Server .deb · amd64</a></li>
+            <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+                   data-asset-prefix="rms-radar_" data-asset-suffix="_arm64.deb">Server .deb · arm64</a></li>
+            <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+                   data-asset-prefix="rms-radar_" data-asset-suffix="_armhf.deb">Server .deb · armhf</a></li>
+            <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+                   data-asset-prefix="rms-radar-" data-asset-suffix=".x86_64.rpm">Server RPM · x86-64</a></li>
+            <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+                   data-asset-prefix="rms-radar-" data-asset-suffix="-x86_64.pkg.tar.zst">Server Arch · x86-64</a></li>
+          </ul>
+          <a class="sub-link" href="self-hosting.html">NixOS and server installs</a>
         </div>
         <div class="card download-card">
           <h3>Docker</h3>
@@ -98,7 +111,7 @@
         <div class="card"><div class="icon">⌘</div><h3>Service-code aware</h3><p>Fetch and filter PUBLIC, EMCOMM, MERCURY, VARDEFM, MODEM73, DATA2G, IONHF, and any private code you add.</p></div>
         <div class="card"><div class="icon">≈</div><h3>Propagation ranking</h3><p>Built-in real-time estimates work offline; an optional VOACAP engine gives point-to-point HF forecasts.</p></div>
         <div class="card"><div class="icon">◎</div><h3>Live gateway map</h3><p>Map, list, and mobile views with freshness, bands, modes, frequencies, and gateway details.</p></div>
-        <div class="card"><div class="icon">↻</div><h3>Daily, not hourly</h3><p>Automatically refreshes once a day, with a rate-limited Refresh button for when you need it now.</p></div>
+        <div class="card"><div class="icon">⇣</div><h3>Works offline</h3><p>Previously viewed map tiles and the gateway list are cached, so the map and ranking still work when the network is unavailable.</p></div>
         <div class="card"><div class="icon">⌁</div><h3>Docker first-class</h3><p>One command, one data volume, multi-arch image, healthcheck, non-root, read-only root filesystem.</p></div>
         <div class="card"><div class="icon">⌂</div><h3>Runs locally</h3><p>Native desktop windows for Windows, macOS, and Linux; the web build is a single CGO-free binary.</p></div>
       </div>
