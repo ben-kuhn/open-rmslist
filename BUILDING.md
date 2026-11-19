@@ -110,8 +110,8 @@ key is no longer trusted; v0.2.6 and later bundles use the current key.
 - `.github/workflows/packaging.yml` — build the Arch, RPM, and Nix packages on
   every push/PR.
 - `.github/workflows/release.yml` — on a `v*` tag: web + desktop + `.deb`/`.rpm`/
-  Arch packages for both the server and the native desktop app, then publish
-  the GitHub Release.
+  Arch packages for both the server and the native desktop app, plus the Arch
+  `PKGBUILD` recipes, then publish the GitHub Release.
 - `.github/workflows/deployed.yml` — Playwright smoke tests against the live
   site (or a supplied `base_url`).
 - `.github/workflows/codeql.yml` — CodeQL analysis.

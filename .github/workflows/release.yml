@@ -193,6 +193,10 @@ jobs:
 
           mkdir -p dist-arch
           cp packaging/arch/*.pkg.tar.zst dist-arch/
+          # Publish the recipes alongside the built packages so users can
+          # inspect, rebuild, or adapt them without cloning the repository.
+          cp packaging/arch/PKGBUILD dist-arch/PKGBUILD
+          cp packaging/arch/PKGBUILD.desktop dist-arch/PKGBUILD.desktop
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: arch

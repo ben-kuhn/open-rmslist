@@ -409,7 +409,9 @@ authentication**. Treat it as a LAN/loopback service:
   overlay (`pkgs.rms-radar` + `services.rms-radar` module).
 
 Release assets include `rms-radar-web-*` for the server plus `.deb`, `.rpm`,
-and Arch packages for both the server and the native desktop client.
+and Arch packages for both the server and the native desktop client. The Arch
+recipes (`PKGBUILD` and `PKGBUILD.desktop`) are published alongside the
+packages so they can be inspected or rebuilt without cloning the repository.
 
 ## Building from source
 
