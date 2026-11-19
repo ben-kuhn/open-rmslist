@@ -19,11 +19,11 @@
       for (const link of document.querySelectorAll("[data-asset-prefix]")) {
         const prefix = link.dataset.assetPrefix || "";
         const suffix = link.dataset.assetSuffix || "";
-        const exclude = link.dataset.assetExclude || "";
+        const excludes = (link.dataset.assetExclude || "").split(/\s+/).filter(Boolean);
         const asset = assets.find((a) =>
           a.name.startsWith(prefix) &&
           a.name.endsWith(suffix) &&
-          (!exclude || !a.name.includes(exclude)));
+          !excludes.some((part) => a.name.includes(part)));
         if (asset && asset.browser_download_url) {
           link.href = asset.browser_download_url;
           link.dataset.resolved = "true";
