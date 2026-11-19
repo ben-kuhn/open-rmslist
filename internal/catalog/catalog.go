@@ -18,20 +18,24 @@ var CommunityModems = map[string]string{
 	"VARDEFM": "VardeFM",
 	"MODEM73": "Modem73",
 	"DATA2G":  "Data2G",
+	"IONHF":   "IONHF",
 }
 
 // dedicatedModemCodes are service codes whose whole purpose is the modem
 // itself, so the label replaces the protocol name even when it is not VARA
-// (for example MODEM73's "Packet 2400" becomes "Modem73 2400").
+// (for example IONHF's "ARDOP 1000" becomes "IONHF"). Their reported bandwidth
+// is deliberately omitted because it varies by channel and modem configuration:
+// DATA2G uses 500/2400 Hz and MODEM73 uses 600/2400 Hz.
 var dedicatedModemCodes = map[string]bool{
 	"MODEM73": true,
 	"DATA2G":  true,
+	"IONHF":   true,
 }
 
 // Channel is a normalized, display-ready channel. Mode is the label to show;
 // for a community-modem service code that is the service's name (Mercury,
-// VardeFM), otherwise it is exactly what the Winlink API reports. RawMode keeps
-// the API value either way.
+// VardeFM, Modem73, Data2G, IONHF), otherwise it is exactly what the Winlink API
+// reports. RawMode keeps the API value either way.
 type Channel struct {
 	ServiceCode    string  `json:"service_code"`
 	Mode           string  `json:"mode"`        // display label
@@ -116,6 +120,11 @@ func normalizeChannel(ch cmsapi.GatewayChannel) Channel {
 // "VARA 500" becomes "Mercury 500"), while every other mode is left exactly as
 // reported. This matters when a gateway publishes non-VARA channels under a
 // community code (for example an ARDOP channel under MERCURY).
+//
+// Dedicated project codes (IONHF, DATA2G, MODEM73) always become just the
+// project name. Their advertised protocol/bandwidth is not a stable identity:
+// IONHF reports ARDOP, DATA2G reports VARA (500 or 2400), and MODEM73 reports
+// Packet 2400 or 600.
 func communityMode(serviceCode, mode string) string {
 	label, ok := CommunityModems[serviceCode]
 	if !ok {
@@ -125,9 +134,12 @@ func communityMode(serviceCode, mode string) string {
 	if len(fields) == 0 {
 		return mode
 	}
-	if !dedicatedModemCodes[serviceCode] && !strings.EqualFold(fields[0], "VARA") {
+	if dedicatedModemCodes[serviceCode] {
+		return label
+	}
+	if !strings.EqualFold(fields[0], "VARA") {
 		// MERCURY/VARDEFM are also used for ordinary (non-VARA) channels;
-		// leave those modes alone. Dedicated project codes replace any mode.
+		// leave those modes alone.
 		return mode
 	}
 	rest := fields[1:]
@@ -155,6 +167,8 @@ func modeFamily(mode string) string {
 		return "Modem73"
 	case strings.HasPrefix(m, "DATA2G"):
 		return "Data2G"
+	case strings.HasPrefix(m, "IONHF"):
+		return "IONHF"
 	case strings.HasPrefix(m, "ARDOP"):
 		return "ARDOP"
 	case strings.HasPrefix(m, "PACKET"):

@@ -56,7 +56,7 @@ Update with `docker compose pull && docker compose up -d`. The `/data` volume
 holds the gateway cache, tiles, conditions, and the saved service-code
 selection; back it up if you care about offline startup.
 
-**Image tags:** `latest`, `1.0`, `1.0.2`, and `edge` (main). Images are
+**Image tags:** `latest`, `1.0`, `1.0.3`, and `edge` (main). Images are
 multi-arch for linux/amd64 and linux/arm64. The container is also built and
 smoke-tested in CI.
 
@@ -172,10 +172,15 @@ because closing its window always quits.
 
 The service-code dropdown is built from the codes present in the fetched data,
 and the mode dropdown shows the modes those channels advertise. Community-modem
-codes are labelled with the service name: `MERCURY` channels show as **Mercury**
-and `VARDEFM` channels as **VardeFM**, even though the API advertises them as
-`VARA`. Other codes (`PUBLIC`, `IONHF`, private groups) keep the reported mode.
-The API's raw mode is preserved in `raw_mode` and shown as a hover hint.
+codes are labelled with the service name: `MERCURY` → **Mercury**, `VARDEFM` →
+**VardeFM**, `MODEM73` → **Modem73**, `DATA2G` → **Data2G**, and `IONHF` →
+**IONHF**, even though the API advertises them under VARA, Packet, or ARDOP.
+
+Dedicated project modems show only the project name. Their reported bandwidth is
+omitted because it varies by channel and configuration: `DATA2G` uses 500 or
+2400 Hz, `MODEM73` uses 600 or 2400 Hz, and `IONHF` is ARDOP-based. `PUBLIC`,
+`EMCOMM`, and private group codes keep the reported mode. The API's raw mode is
+preserved in `raw_mode` and shown as a hover hint.
 
 The Winlink API has no wildcard for service codes, so `-service-codes` lists the
 codes to request. The default includes the documented public codes and the
@@ -186,10 +191,10 @@ known community codes:
 | `PUBLIC` | maritime and open amateur gateways |
 | `MERCURY` | Mercury HF gateways (community) |
 | `VARDEFM` | VardeFM gateways (community) |
-| `MODEM73` | Modem73 gateways (community) |
-| `DATA2G` | Data2G gateways (community) |
+| `MODEM73` | Modem73 gateways (community; variable packet speed) |
+| `DATA2G` | Data2G gateways (community; variable VARA bandwidth) |
 | `EMCOMM` | emergency gateways that do not allow public access |
-| `IONHF` | IONHF gateways (community) |
+| `IONHF` | IONHF gateways (community; ARDOP-based) |
 | *other* | any community or private group code |
 
 The list is **runtime-configurable** — in the native and browser desktop apps,

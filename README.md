@@ -107,8 +107,10 @@ offline.
 - **Maps the live Winlink gateway list** on OpenStreetMap.
 - **Filters by service code** — `PUBLIC`, `EMCOMM`, `IONHF`, `MERCURY`, `VARDEFM`,
   `MODEM73`, `DATA2G`, and any other community or private codes you configure.
-- **Shows the real mode** for every channel. Mercury and VardeFM gateways are
-  labelled from their service code, even though Winlink advertises them as VARA.
+- **Shows the real mode** for every channel. Mercury, VardeFM, IONHF, Modem73,
+  and Data2G gateways are labelled from their service code, even when Winlink
+  advertises them under VARA, ARDOP, or Packet. Variable modem widths are not
+  shown for the dedicated project codes.
 - **Ranks by propagation** — a built-in heuristic works everywhere, and an
   optional VOACAP engine gives point-to-point HF forecasts.
 - **Hides implausible paths** — 0% VHF/UHF results are dropped while ranking,

@@ -10,7 +10,7 @@
 # local build provides it.
 
 Name:           rms-radar
-Version:        1.0.2
+Version:        1.0.3
 Release:        1%{?dist}
 Summary:        Winlink RMS gateway map with service-code filtering and propagation ranking
 
@@ -75,6 +75,8 @@ install -Dm644 contrib/desktop/rms-radar-1024.png %{buildroot}%{_datadir}/icons/
 %systemd_postun rms-radar.service
 
 %changelog
+* Thu Nov 19 2026 RMS Radar contributors - 1.0.3-1
+- Normalize IONHF as IONHF and drop variable widths from Modem73/Data2G
 * Thu Nov 19 2026 RMS Radar contributors - 1.0.2-1
 - Tile cache hits bypass the rate limiter; retry failed zoom tiles
 * Wed Nov 18 2026 RMS Radar contributors - 1.0.1-1
