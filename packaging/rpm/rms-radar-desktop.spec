@@ -12,7 +12,7 @@
 #   LICENSE
 
 Name:           rms-radar-desktop
-Version:        1.0.1
+Version:        1.0.2
 Release:        1%{?dist}
 Summary:        Native desktop client for the RMS Radar Winlink gateway map
 
@@ -55,6 +55,8 @@ install -Dm644 %{SOURCE3} %{buildroot}%{_datadir}/icons/hicolor/1024x1024/apps/r
 %license LICENSE
 
 %changelog
+* Thu Nov 19 2026 RMS Radar contributors - 1.0.2-1
+- Rebuild for RMS Radar 1.0.2
 * Wed Nov 18 2026 RMS Radar contributors - 1.0.1-1
 - Add a native desktop RPM
 * Wed Nov 18 2026 RMS Radar contributors - 1.0.0-1
