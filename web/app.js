@@ -719,6 +719,10 @@ function initCodesDialog() {
       saveToken();
     }
   });
+  $("code-defaults").addEventListener("click", () => {
+    if (!state.config.default_service_codes) return;
+    changeCodes({ codes: state.config.default_service_codes });
+  });
 }
 
 /* ---------- events ---------- */

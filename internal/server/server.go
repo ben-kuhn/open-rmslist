@@ -346,6 +346,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"version":                      s.cfg.Version,
 		"service_codes":                s.loader.ServiceCodes(),
+		"default_service_codes":        append([]string(nil), cmsapi.DefaultServiceCodes...),
 		"service_codes_editable":       s.serviceCodeEditingEnabled(),
 		"service_codes_token_required": s.serviceCodeTokenRequired(),
 		"desktop":                      s.cfg.DesktopMode || s.cfg.DesktopToken != "",

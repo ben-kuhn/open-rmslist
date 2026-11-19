@@ -3,6 +3,7 @@ Type=Application
 Name=RMS Radar
 GenericName=Winlink gateway map
 Comment=Map and rank Winlink RMS gateways by service code, band, and mode
+Icon=rms-radar
 Exec=rms-radar-desktop
 Terminal=false
 Categories=Network;HamRadio;

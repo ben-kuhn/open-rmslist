@@ -53,8 +53,9 @@ CGO_ENABLED=1 go build -tags desktop -trimpath -ldflags "${LDFLAGS}" \
 case "$GOOS" in
   darwin)
     app="${OUT}/RMS Radar.app"
-    mkdir -p "${app}/Contents/MacOS"
+    mkdir -p "${app}/Contents/MacOS" "${app}/Contents/Resources"
     cp "${OUT}/${NAME}" "${app}/Contents/MacOS/rms-radar-desktop"
+    cp contrib/desktop/rms-radar.icns "${app}/Contents/Resources/rms-radar.icns"
     cat > "${app}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -67,6 +68,7 @@ case "$GOOS" in
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>rms-radar-desktop</string>
+  <key>CFBundleIconFile</key><string>rms-radar.icns</string>
   <key>LSMinimumSystemVersion</key><string>10.13</string>
   <key>NSHighResolutionCapable</key><true/>
 </dict>
@@ -84,9 +86,10 @@ PLIST
     ;;
   *)
     cp contrib/desktop/rms-radar-desktop.desktop "${OUT}/rms-radar-desktop.desktop"
+    cp contrib/desktop/rms-radar.svg "${OUT}/rms-radar.svg"
     ln -sf "${NAME}${EXT}" "${OUT}/rms-radar-desktop"
-    tar -C "$OUT" -czf "${OUT}/${NAME}.tar.gz" "${NAME}${EXT}" "rms-radar-desktop" "rms-radar-desktop.desktop"
-    rm -f "${OUT}/rms-radar-desktop" "${OUT}/rms-radar-desktop.desktop"
+    tar -C "$OUT" -czf "${OUT}/${NAME}.tar.gz" "${NAME}${EXT}" "rms-radar-desktop" "rms-radar-desktop.desktop" "rms-radar.svg"
+    rm -f "${OUT}/rms-radar-desktop" "${OUT}/rms-radar-desktop.desktop" "${OUT}/rms-radar.svg"
     ;;
 esac
 

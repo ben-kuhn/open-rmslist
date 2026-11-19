@@ -10,7 +10,7 @@
 # local build provides it.
 
 Name:           rms-radar
-Version:        0.2.8
+Version:        0.2.9
 Release:        1%{?dist}
 Summary:        Winlink RMS gateway map with service-code filtering and propagation ranking
 
@@ -53,11 +53,14 @@ go build -trimpath -ldflags "-s -w -X main.version=%{version}" -o rms-radar .
 install -Dm755 rms-radar %{buildroot}%{_bindir}/rms-radar
 install -Dm644 packaging/common/rms-radar.service %{buildroot}%{_unitdir}/rms-radar.service
 install -Dm644 contrib/desktop/rms-radar.desktop %{buildroot}%{_datadir}/applications/rms-radar.desktop
+%{_datadir}/icons/hicolor/scalable/apps/rms-radar.svg
+install -Dm644 contrib/desktop/rms-radar.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/rms-radar.svg
 
 %files
 %{_bindir}/rms-radar
 %{_unitdir}/rms-radar.service
 %{_datadir}/applications/rms-radar.desktop
+%{_datadir}/icons/hicolor/scalable/apps/rms-radar.svg
 %license LICENSE
 %doc README.md
 
@@ -71,6 +74,8 @@ install -Dm644 contrib/desktop/rms-radar.desktop %{buildroot}%{_datadir}/applica
 %systemd_postun rms-radar.service
 
 %changelog
+* Wed Nov 18 2026 RMS Radar contributors - 0.2.9-1
+- Add the app icon, service-code reset, and legacy default migration
 * Wed Nov 18 2026 RMS Radar contributors - 0.2.8-1
 - Security hardening: loopback-only desktop edits, IPv6 /64 limits, GET rank removal
 * Wed Nov 18 2026 RMS Radar contributors - 0.2.7-1

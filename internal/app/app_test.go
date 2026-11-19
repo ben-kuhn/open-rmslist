@@ -79,6 +79,7 @@ func TestServiceCodesFromDiskMigratesDefaults(t *testing.T) {
 	path := filepath.Join(dir, "service_codes.json")
 	fallback := append([]string(nil), cmsapi.DefaultServiceCodes...)
 	seedMarker := path + ".seed"
+	legacyMarker := path + ".legacy-v1"
 
 	if err := os.WriteFile(path, []byte(`["PUBLIC","EMCOMM"]`), 0o644); err != nil {
 		t.Fatal(err)
@@ -104,6 +105,9 @@ func TestServiceCodesFromDiskMigratesDefaults(t *testing.T) {
 	if err := os.Remove(seedMarker); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Remove(legacyMarker); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(`["DATA2G","EMCOMM","MERCURY","MODEM73","PUBLIC","VARDEFM"]`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -118,8 +122,26 @@ func TestServiceCodesFromDiskMigratesDefaults(t *testing.T) {
 		t.Fatalf("EMCOMM still present after migration: %v", got)
 	}
 
+	// CarKit was observed with EMCOMM/MERCURY/PUBLIC and an existing seed marker
+	// from 0.2.8; the legacy migration must still reach it.
+	carKitPath := filepath.Join(t.TempDir(), "service_codes.json")
+	if err := os.WriteFile(carKitPath, []byte(`["PUBLIC","EMCOMM","MERCURY"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(carKitPath+".seed", []byte(serviceCodesSeedHash(fallback)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = serviceCodesFromDisk(carKitPath, fallback)
+	if !sameServiceCodes(got, fallback) {
+		t.Fatalf("CarKit legacy list was not migrated: %v", got)
+	}
+	if _, ok := indexOf(got, "EMCOMM"); ok {
+		t.Fatalf("CarKit still has EMCOMM: %v", got)
+	}
+
 	// A custom selection is preserved on first use of the marker.
 	_ = os.Remove(seedMarker)
+	_ = os.Remove(legacyMarker)
 	if err := os.WriteFile(path, []byte(`["MYGROUP","PUBLIC"]`), 0o644); err != nil {
 		t.Fatal(err)
 	}

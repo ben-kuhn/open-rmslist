@@ -179,10 +179,23 @@ func sameServiceCodes(a, b []string) bool {
 }
 
 func isPreviousServiceDefault(codes []string) bool {
-	// Sorted forms of the default sets used before 0.2.7.
-	oldTwo := []string{"EMCOMM", "PUBLIC"}
-	oldSix := []string{"DATA2G", "EMCOMM", "MERCURY", "MODEM73", "PUBLIC", "VARDEFM"}
-	return sameServiceCodes(codes, oldTwo) || sameServiceCodes(codes, oldSix)
+	// Sorted forms of every default set used before 0.2.9. The three-code
+	// EMCOMM/MERCURY/PUBLIC entry was observed on an older CarKit desktop
+	// install and is included so that one-time migration can reach it.
+	previous := [][]string{
+		{"EMCOMM", "PUBLIC"},
+		{"MERCURY", "PUBLIC"},
+		{"MERCURY", "PUBLIC", "VARDEFM"},
+		{"EMCOMM", "MERCURY", "PUBLIC"},
+		{"EMCOMM", "MERCURY", "PUBLIC", "VARDEFM"},
+		{"DATA2G", "EMCOMM", "MERCURY", "MODEM73", "PUBLIC", "VARDEFM"},
+	}
+	for _, p := range previous {
+		if sameServiceCodes(codes, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func serviceCodesSeedHash(codes []string) string {
@@ -192,6 +205,10 @@ func serviceCodesSeedHash(codes []string) string {
 
 func writeServiceCodeMarker(path, hash string) {
 	_ = atomicfile.Write(path, []byte(hash+"\n"), 0o644)
+}
+
+func writeLegacyServiceMarker(path string) {
+	_ = atomicfile.Write(path, []byte("v1\n"), 0o644)
 }
 
 // serviceCodesFromDisk uses a persisted UI selection while the configured seed
@@ -204,31 +221,50 @@ func serviceCodesFromDisk(path string, fallback []string) []string {
 	}
 	seedHash := serviceCodesSeedHash(fallback)
 	markerPath := path + ".seed"
+	legacyPath := path + ".legacy-v1"
 	marker, _ := os.ReadFile(markerPath)
 	markerCurrent := strings.TrimSpace(string(marker)) == seedHash
+	_, legacyErr := os.Stat(legacyPath)
+	legacyDone := legacyErr == nil
 
 	b, err := os.ReadFile(path)
 	if err != nil {
 		writeServiceCodeMarker(markerPath, seedHash)
+		writeLegacyServiceMarker(legacyPath)
 		return fallback
 	}
 	var codes []string
 	if json.Unmarshal(b, &codes) != nil {
 		writeServiceCodeMarker(markerPath, seedHash)
+		writeLegacyServiceMarker(legacyPath)
 		return fallback
 	}
 	normalized, nerr := cmsapi.NormalizeServiceCodes(codes)
 	if nerr != nil || len(normalized) == 0 {
 		writeServiceCodeMarker(markerPath, seedHash)
+		writeLegacyServiceMarker(legacyPath)
 		return fallback
+	}
+	// One-time migration for any historical default, independent of the seed
+	// marker. A custom selection is preserved and marked done.
+	if !legacyDone {
+		if isPreviousServiceDefault(normalized) {
+			if b, err := json.Marshal(fallback); err == nil {
+				_ = atomicfile.Write(path, b, 0o644)
+			}
+			writeServiceCodeMarker(markerPath, seedHash)
+			writeLegacyServiceMarker(legacyPath)
+			return fallback
+		}
+		writeLegacyServiceMarker(legacyPath)
 	}
 	if markerCurrent {
 		return normalized
 	}
-	// First run with this marker: migrate a known old default; preserve a
-	// custom selection. A marker from a different seed means the operator
-	// changed the configured list, which is authoritative.
-	if len(marker) == 0 && !isPreviousServiceDefault(normalized) {
+	// A marker from a different seed means the operator changed the configured
+	// list, which is authoritative. No marker means this is a pre-marker custom
+	// selection, which is preserved.
+	if len(marker) == 0 {
 		writeServiceCodeMarker(markerPath, seedHash)
 		return normalized
 	}
