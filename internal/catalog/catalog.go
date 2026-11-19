@@ -16,8 +16,8 @@ import (
 var CommunityModems = map[string]string{
 	"MERCURY": "Mercury",
 	"VARDEFM": "VardeFM",
-	"MODEM73": "Modem73",
-	"DATA2G":  "Data2G",
+	"MODEM73": "MODEM73",
+	"DATA2G":  "DATA2G",
 	"IONHF":   "IONHF",
 }
 
@@ -34,7 +34,7 @@ var dedicatedModemCodes = map[string]bool{
 
 // Channel is a normalized, display-ready channel. Mode is the label to show;
 // for a community-modem service code that is the service's name (Mercury,
-// VardeFM, Modem73, Data2G, IONHF), otherwise it is exactly what the Winlink API
+// VardeFM, MODEM73, DATA2G, IONHF), otherwise it is exactly what the Winlink API
 // reports. RawMode keeps the API value either way.
 type Channel struct {
 	ServiceCode    string  `json:"service_code"`
@@ -122,9 +122,9 @@ func normalizeChannel(ch cmsapi.GatewayChannel) Channel {
 // community code (for example an ARDOP channel under MERCURY).
 //
 // Dedicated project codes (IONHF, DATA2G, MODEM73) always become just the
-// project name. Their advertised protocol/bandwidth is not a stable identity:
+// service code. Their advertised protocol/bandwidth is not a stable identity:
 // IONHF reports ARDOP, DATA2G reports VARA (500 or 2400), and MODEM73 reports
-// Packet 2400 or 600.
+// Packet 2400 or 600. The service code is authoritative.
 func communityMode(serviceCode, mode string) string {
 	label, ok := CommunityModems[serviceCode]
 	if !ok {
@@ -164,9 +164,9 @@ func modeFamily(mode string) string {
 	case strings.HasPrefix(m, "VARDEFM"):
 		return "VardeFM"
 	case strings.HasPrefix(m, "MODEM73"):
-		return "Modem73"
+		return "MODEM73"
 	case strings.HasPrefix(m, "DATA2G"):
-		return "Data2G"
+		return "DATA2G"
 	case strings.HasPrefix(m, "IONHF"):
 		return "IONHF"
 	case strings.HasPrefix(m, "ARDOP"):
