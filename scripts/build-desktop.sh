@@ -86,10 +86,10 @@ PLIST
     ;;
   *)
     cp contrib/desktop/rms-radar-desktop.desktop "${OUT}/rms-radar-desktop.desktop"
-    cp contrib/desktop/rms-radar.svg "${OUT}/rms-radar.svg"
+    cp contrib/desktop/rms-radar.svg "${OUT}/rms-radar-desktop.svg"
     ln -sf "${NAME}${EXT}" "${OUT}/rms-radar-desktop"
-    tar -C "$OUT" -czf "${OUT}/${NAME}.tar.gz" "${NAME}${EXT}" "rms-radar-desktop" "rms-radar-desktop.desktop" "rms-radar.svg"
-    rm -f "${OUT}/rms-radar-desktop" "${OUT}/rms-radar-desktop.desktop" "${OUT}/rms-radar.svg"
+    tar -C "$OUT" -czf "${OUT}/${NAME}.tar.gz" "${NAME}${EXT}" "rms-radar-desktop" "rms-radar-desktop.desktop" "rms-radar-desktop.svg"
+    rm -f "${OUT}/rms-radar-desktop" "${OUT}/rms-radar-desktop.desktop" "${OUT}/rms-radar-desktop.svg"
     ;;
 esac
 

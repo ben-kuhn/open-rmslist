@@ -110,22 +110,41 @@ jobs:
           path: dist-desktop/*
 
   rpm:
-    name: RPM package
-    needs: verify
+    name: RPM packages
+    needs: [verify, desktop]
     runs-on: ubuntu-latest
     container: fedora:latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: build RPM
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: desktop-ubuntu-latest
+          path: desktop-linux
+      - name: build RPMs
         run: |
           dnf -y install golang rpm-build systemd-rpm-macros
           cd "$GITHUB_WORKSPACE"
           VER="${GITHUB_REF_NAME#v}"
           PREFIX="rms-radar-${VER}"
-          mkdir -p "$HOME/rpmbuild/SOURCES"
+          mkdir -p "$HOME/rpmbuild/SOURCES" "$HOME/rpmbuild/SPECS"
           tar -czf "$HOME/rpmbuild/SOURCES/${PREFIX}.tar.gz" \
             --exclude=.git --transform "s,^\\./,${PREFIX}/," .
           rpmbuild -ba packaging/rpm/rms-radar.spec
+
+          # Native desktop client, packaged from the binary built once on the
+          # Linux desktop job. This keeps the RPM identical to the tarball and
+          # .deb instead of rebuilding WebKitGTK CGo code on every distro.
+          bin="desktop-linux/rms-radar-desktop-${VER}-linux-amd64"
+          [ -f "$bin" ] || { echo "missing $bin" >&2; exit 1; }
+          cp "$bin" "$HOME/rpmbuild/SOURCES/rms-radar-desktop"
+          cp contrib/desktop/rms-radar-desktop.desktop \
+            contrib/desktop/rms-radar.svg \
+            contrib/desktop/rms-radar-1024.png \
+            LICENSE "$HOME/rpmbuild/SOURCES/"
+          sed "s/^Version:.*/Version: ${VER}/" \
+            packaging/rpm/rms-radar-desktop.spec > "$HOME/rpmbuild/SPECS/rms-radar-desktop.spec"
+          rpmbuild -bb "$HOME/rpmbuild/SPECS/rms-radar-desktop.spec"
+
           mkdir -p dist-rpm
           cp "$HOME/rpmbuild/RPMS"/*/*.rpm dist-rpm/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -134,13 +153,17 @@ jobs:
           path: dist-rpm/*
 
   arch:
-    name: Arch package
-    needs: verify
+    name: Arch packages
+    needs: [verify, desktop]
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: build Arch package
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: desktop-ubuntu-latest
+          path: desktop-linux
+      - name: build Arch packages
         run: |
           pacman -Sy --noconfirm --needed base-devel go curl
           useradd -m builder
@@ -151,8 +174,23 @@ jobs:
             "https://github.com/ben-kuhn/rms-radar/archive/refs/tags/v${VER}.tar.gz"
           SHA="$(sha256sum "$GITHUB_WORKSPACE/packaging/arch/rms-radar-${VER}.tar.gz" | awk '{print $1}')"
           sed -i "s/^sha256sums=.*/sha256sums=('${SHA}')/" "$GITHUB_WORKSPACE/packaging/arch/PKGBUILD"
+          sed -i "s/^pkgver=.*/pkgver=${VER}/" "$GITHUB_WORKSPACE/packaging/arch/PKGBUILD"
           chown -R builder:builder .
           su builder -c "cd $GITHUB_WORKSPACE/packaging/arch && makepkg --noconfirm"
+
+          # Native desktop client, packaged from the same tested binary as the
+          # tarball, .deb, and RPM.
+          bin="desktop-linux/rms-radar-desktop-${VER}-linux-amd64"
+          [ -f "$bin" ] || { echo "missing $bin" >&2; exit 1; }
+          cp "$bin" packaging/arch/rms-radar-desktop
+          cp contrib/desktop/rms-radar-desktop.desktop \
+            contrib/desktop/rms-radar.svg \
+            contrib/desktop/rms-radar-1024.png \
+            LICENSE packaging/arch/
+          sed -i "s/^pkgver=.*/pkgver=${VER}/" packaging/arch/PKGBUILD.desktop
+          chown -R builder:builder packaging/arch
+          su builder -c "cd $GITHUB_WORKSPACE/packaging/arch && makepkg -p PKGBUILD.desktop --noconfirm --nodeps"
+
           mkdir -p dist-arch
           cp packaging/arch/*.pkg.tar.zst dist-arch/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

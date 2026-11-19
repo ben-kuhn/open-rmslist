@@ -56,7 +56,7 @@ Update with `docker compose pull && docker compose up -d`. The `/data` volume
 holds the gateway cache, tiles, conditions, and the saved service-code
 selection; back it up if you care about offline startup.
 
-**Image tags:** `latest`, `1.0`, `1.0.0`, and `edge` (main). Images are
+**Image tags:** `latest`, `1.0`, `1.0.1`, and `edge` (main). Images are
 multi-arch for linux/amd64 and linux/arm64. The container is also built and
 smoke-tested in CI.
 
@@ -399,14 +399,17 @@ authentication**. Treat it as a LAN/loopback service:
   `StateDirectory=rms-radar`, `/usr/bin/rms-radar`.
 - **systemd (manual):** `contrib/systemd/rms-radar.service` — static
   `rms-radar` user, `/usr/local/bin`, `/var/lib/rms-radar`.
-- **Arch:** `packaging/arch/PKGBUILD`.
-- **RPM:** `packaging/rpm/rms-radar.spec`.
-- **DEB:** `scripts/build-deb.sh` (used by the release workflow).
+- **Arch:** `packaging/arch/PKGBUILD` (server) and
+  `packaging/arch/PKGBUILD.desktop` (native desktop).
+- **RPM:** `packaging/rpm/rms-radar.spec` (server) and
+  `packaging/rpm/rms-radar-desktop.spec` (native desktop).
+- **DEB:** `scripts/build-deb.sh` (server and desktop; used by the release
+  workflow).
 - **Nix / NixOS:** the [`nix-ham-packages`](https://github.com/ben-kuhn/nix-ham-packages)
   overlay (`pkgs.rms-radar` + `services.rms-radar` module).
 
 Release assets include `rms-radar-web-*` for the server plus `.deb`, `.rpm`,
-and Arch packages where applicable.
+and Arch packages for both the server and the native desktop client.
 
 ## Building from source
 

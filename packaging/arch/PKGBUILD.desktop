@@ -1,0 +1,33 @@
+# Maintainer: RMS Radar contributors
+#
+# Native desktop package. The release workflow copies the tested Linux desktop
+# binary and its icons next to this file, then runs:
+#
+#   makepkg -p PKGBUILD.desktop --noconfirm --nodeps
+#
+# The binary is built once with CGo/WebKitGTK on the Linux release runner; this
+# PKGBUILD only packages it.
+
+pkgname=rms-radar-desktop
+pkgver=1.0.1
+pkgrel=1
+pkgdesc="Native desktop client for the RMS Radar Winlink gateway map"
+arch=('x86_64')
+url="https://github.com/ben-kuhn/rms-radar"
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3' 'ca-certificates')
+options=('!strip' '!debug')
+source=()
+sha256sums=()
+
+package() {
+  install -Dm755 "${startdir}/rms-radar-desktop" "${pkgdir}/usr/bin/rms-radar-desktop"
+  install -Dm644 "${startdir}/rms-radar-desktop.desktop" \
+    "${pkgdir}/usr/share/applications/rms-radar-desktop.desktop"
+  install -Dm644 "${startdir}/rms-radar.svg" \
+    "${pkgdir}/usr/share/icons/hicolor/scalable/apps/rms-radar-desktop.svg"
+  install -Dm644 "${startdir}/rms-radar-1024.png" \
+    "${pkgdir}/usr/share/icons/hicolor/1024x1024/apps/rms-radar-desktop.png"
+  install -Dm644 "${startdir}/LICENSE" \
+    "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

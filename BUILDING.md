@@ -82,7 +82,9 @@ BASE_URL=http://localhost:8079 npx playwright test
 - `site/` — static download and self-hosting site, published to GitHub Pages
   by `.github/workflows/pages.yml`.
 - `packaging/arch/PKGBUILD` — Arch package (web/server).
+- `packaging/arch/PKGBUILD.desktop` — Arch package (native desktop).
 - `packaging/rpm/rms-radar.spec` — RPM package (web/server).
+- `packaging/rpm/rms-radar-desktop.spec` — RPM package (native desktop).
 - `packaging/common/rms-radar.service` — systemd unit installed by the distro
   packages (`DynamicUser`, `StateDirectory=rms-radar`, `/usr/bin/rms-radar`).
 - `contrib/systemd/rms-radar.service` — manual-install unit for
@@ -108,7 +110,8 @@ key is no longer trusted; v0.2.6 and later bundles use the current key.
 - `.github/workflows/packaging.yml` — build the Arch, RPM, and Nix packages on
   every push/PR.
 - `.github/workflows/release.yml` — on a `v*` tag: web + desktop + `.deb`/`.rpm`/
-  Arch packages, then publish the GitHub Release.
+  Arch packages for both the server and the native desktop app, then publish
+  the GitHub Release.
 - `.github/workflows/deployed.yml` — Playwright smoke tests against the live
   site (or a supplied `base_url`).
 - `.github/workflows/codeql.yml` — CodeQL analysis.

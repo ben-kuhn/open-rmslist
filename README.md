@@ -49,10 +49,24 @@ and 11. If it is missing, install the
 
   Launch **RMS Radar** from your applications menu.
 
+- **Fedora / RHEL:** download `rms-radar-desktop-<version>-1.*.x86_64.rpm`, then:
+
+  ```bash
+  sudo dnf install ./rms-radar-desktop-<version>-1.*.x86_64.rpm
+  ```
+
+- **Arch Linux:** download
+  `rms-radar-desktop-<version>-1-x86_64.pkg.tar.zst`, then:
+
+  ```bash
+  sudo pacman -U rms-radar-desktop-<version>-1-x86_64.pkg.tar.zst
+  ```
+
 - **Any other distribution:** download
   `rms-radar-desktop-<version>-linux-amd64.tar.gz`, extract it, and run
   `./rms-radar-desktop`. It needs WebKitGTK 4.1
-  (`libwebkit2gtk-4.1-0` on Debian/Ubuntu, `webkit2gtk-4.1` on Arch/Fedora).
+  (`libwebkit2gtk-4.1-0` on Debian/Ubuntu, `webkit2gtk-4.1` on Arch,
+  `webkit2gtk4.1` on Fedora) and GTK 3.
 
 - **NixOS:** use the
   [`nix-ham-packages`](https://github.com/ben-kuhn/nix-ham-packages) overlay.

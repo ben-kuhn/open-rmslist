@@ -20,12 +20,25 @@ jobs:
           VERSION="$(sed -n 's/^var version = "\([^"]*\)"/\1/p' shared.go)"
           [ -n "$VERSION" ] || { echo "could not determine version" >&2; exit 1; }
           PREFIX="rms-radar-${VERSION}"
-          mkdir -p "$HOME/rpmbuild/SOURCES"
+          mkdir -p "$HOME/rpmbuild/SOURCES" "$HOME/rpmbuild/SPECS"
           # Source0 points at the GitHub tag, which may not exist yet; build a
           # local tarball with the same layout for validation.
           tar -czf "$HOME/rpmbuild/SOURCES/${PREFIX}.tar.gz" \
             --exclude=.git --transform "s,^\\./,${PREFIX}/," .
           rpmbuild -ba packaging/rpm/rms-radar.spec
+
+          # Validate the desktop spec without spending CI time on a second
+          # WebKitGTK CGo build. The release workflow packages the real binary
+          # from the Linux desktop job.
+          printf '#!/bin/sh\nexit 0\n' > "$HOME/rpmbuild/SOURCES/rms-radar-desktop"
+          chmod 755 "$HOME/rpmbuild/SOURCES/rms-radar-desktop"
+          cp contrib/desktop/rms-radar-desktop.desktop \
+            contrib/desktop/rms-radar.svg \
+            contrib/desktop/rms-radar-1024.png \
+            LICENSE "$HOME/rpmbuild/SOURCES/"
+          sed "s/^Version:.*/Version: ${VERSION}/" \
+            packaging/rpm/rms-radar-desktop.spec > "$HOME/rpmbuild/SPECS/rms-radar-desktop.spec"
+          rpmbuild -bb "$HOME/rpmbuild/SPECS/rms-radar-desktop.spec"
 
   arch:
     name: Arch (PKGBUILD)
@@ -52,6 +65,18 @@ jobs:
           sed -i "s/^sha256sums=.*/sha256sums=('${SHA}')/" packaging/arch/PKGBUILD
           chown -R builder:builder .
           su builder -c "cd $GITHUB_WORKSPACE/packaging/arch && makepkg --noconfirm"
+
+          # Validate the desktop package layout with a stub binary; the release
+          # workflow replaces it with the tested CGo/WebKitGTK build.
+          printf '#!/bin/sh\nexit 0\n' > packaging/arch/rms-radar-desktop
+          chmod 755 packaging/arch/rms-radar-desktop
+          cp contrib/desktop/rms-radar-desktop.desktop \
+            contrib/desktop/rms-radar.svg \
+            contrib/desktop/rms-radar-1024.png \
+            LICENSE packaging/arch/
+          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" packaging/arch/PKGBUILD.desktop
+          chown -R builder:builder .
+          su builder -c "cd $GITHUB_WORKSPACE/packaging/arch && makepkg -p PKGBUILD.desktop --noconfirm --nodeps"
 
   nix:
     name: Nix (buildGoModule)

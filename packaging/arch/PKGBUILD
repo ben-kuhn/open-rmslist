@@ -1,7 +1,7 @@
 # Maintainer: RMS Radar contributors
 
 pkgname=rms-radar
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc="Winlink RMS gateway map with service-code filtering and propagation ranking"
 arch=('x86_64' 'aarch64' 'armv7h')
@@ -26,5 +26,6 @@ package() {
   install -Dm644 packaging/common/rms-radar.service "${pkgdir}/usr/lib/systemd/system/rms-radar.service"
   install -Dm644 contrib/desktop/rms-radar.desktop "${pkgdir}/usr/share/applications/rms-radar.desktop"
   install -Dm644 contrib/desktop/rms-radar.svg "${pkgdir}/usr/share/icons/hicolor/scalable/apps/rms-radar.svg"
+  install -Dm644 contrib/desktop/rms-radar-1024.png "${pkgdir}/usr/share/icons/hicolor/1024x1024/apps/rms-radar.png"
   # The web UI is embedded in the binary; no separate assets to install.
 }

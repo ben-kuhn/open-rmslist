@@ -35,12 +35,20 @@ ROOT="$(mktemp -d)"
 trap 'rm -rf "$ROOT"' EXIT
 
 mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/bin" "$ROOT/usr/share/applications" \
-  "$ROOT/usr/share/icons/hicolor/scalable/apps" "$ROOT/usr/share/doc/$PKG"
+  "$ROOT/usr/share/icons/hicolor/scalable/apps" \
+  "$ROOT/usr/share/icons/hicolor/1024x1024/apps" "$ROOT/usr/share/doc/$PKG"
 
 install -Dm755 "$BIN" "$ROOT/usr/bin/$INSTALL_NAME"
 install -Dm644 LICENSE "$ROOT/usr/share/doc/$PKG/copyright"
+if [ "$KIND" = "web" ]; then
+  ICON_NAME="rms-radar"
+else
+  ICON_NAME="rms-radar-desktop"
+fi
 install -Dm644 contrib/desktop/rms-radar.svg \
-  "$ROOT/usr/share/icons/hicolor/scalable/apps/rms-radar.svg"
+  "$ROOT/usr/share/icons/hicolor/scalable/apps/${ICON_NAME}.svg"
+install -Dm644 contrib/desktop/rms-radar-1024.png \
+  "$ROOT/usr/share/icons/hicolor/1024x1024/apps/${ICON_NAME}.png"
 
 if [ "$KIND" = "web" ]; then
   mkdir -p "$ROOT/lib/systemd/system"

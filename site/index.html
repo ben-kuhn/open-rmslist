@@ -69,29 +69,35 @@
              data-asset-prefix="rms-radar-desktop-" data-asset-suffix="-macos-arm64-app.zip">Download for macOS</a>
           <a class="sub-link" href="https://github.com/ben-kuhn/rms-radar/releases/latest">All release files</a>
         </div>
-        <div class="card download-card">
+        <div class="card download-card linux-download">
           <h3>Linux</h3>
           <p class="meta">Desktop · Debian · RPM · Arch</p>
           <p>Native WebKitGTK app, or the server package for your distribution.</p>
           <a class="btn primary" href="https://github.com/ben-kuhn/rms-radar/releases/latest"
              data-asset-prefix="rms-radar-desktop-" data-asset-suffix="-linux-amd64.tar.gz">Desktop tarball</a>
           <ul class="download-list">
+            <li class="list-label">Desktop</li>
             <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
-                   data-asset-prefix="rms-radar-desktop_" data-asset-suffix="_amd64.deb">Desktop .deb · amd64</a></li>
+                   data-asset-prefix="rms-radar-desktop_" data-asset-suffix="_amd64.deb">Debian .deb · amd64</a></li>
             <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
-                   data-asset-prefix="rms-radar_" data-asset-suffix="_amd64.deb">Server .deb · amd64</a></li>
+                   data-asset-prefix="rms-radar-desktop-" data-asset-suffix=".x86_64.rpm">Fedora RPM · x86-64</a></li>
             <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
-                   data-asset-prefix="rms-radar_" data-asset-suffix="_arm64.deb">Server .deb · arm64</a></li>
+                   data-asset-prefix="rms-radar-desktop-" data-asset-suffix="-x86_64.pkg.tar.zst">Arch package · x86-64</a></li>
+            <li class="list-label">Server</li>
             <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
-                   data-asset-prefix="rms-radar_" data-asset-suffix="_armhf.deb">Server .deb · armhf</a></li>
+                   data-asset-prefix="rms-radar_" data-asset-suffix="_amd64.deb">Debian .deb · amd64</a></li>
             <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
-                   data-asset-prefix="rms-radar-" data-asset-suffix=".x86_64.rpm">Server RPM · x86-64</a></li>
+                   data-asset-prefix="rms-radar_" data-asset-suffix="_arm64.deb">Debian .deb · arm64</a></li>
             <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
-                   data-asset-prefix="rms-radar-" data-asset-suffix="-x86_64.pkg.tar.zst">Server Arch · x86-64</a></li>
+                   data-asset-prefix="rms-radar_" data-asset-suffix="_armhf.deb">Debian .deb · armhf</a></li>
+            <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+                   data-asset-prefix="rms-radar-" data-asset-exclude="desktop" data-asset-suffix=".x86_64.rpm">Fedora RPM · x86-64</a></li>
+            <li><a href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+                   data-asset-prefix="rms-radar-" data-asset-exclude="desktop" data-asset-suffix="-x86_64.pkg.tar.zst">Arch package · x86-64</a></li>
           </ul>
           <a class="sub-link" href="self-hosting.html">NixOS and server installs</a>
         </div>
-        <div class="card download-card">
+        <div class="card download-card docker-download">
           <h3>Docker</h3>
           <p class="meta">amd64 / arm64 · GHCR</p>
           <p>The web map and VOACAP engine in one container. Bring your own reverse proxy.</p>

@@ -10,7 +10,7 @@
 # local build provides it.
 
 Name:           rms-radar
-Version:        1.0.0
+Version:        1.0.1
 Release:        1%{?dist}
 Summary:        Winlink RMS gateway map with service-code filtering and propagation ranking
 
@@ -54,12 +54,14 @@ install -Dm755 rms-radar %{buildroot}%{_bindir}/rms-radar
 install -Dm644 packaging/common/rms-radar.service %{buildroot}%{_unitdir}/rms-radar.service
 install -Dm644 contrib/desktop/rms-radar.desktop %{buildroot}%{_datadir}/applications/rms-radar.desktop
 install -Dm644 contrib/desktop/rms-radar.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/rms-radar.svg
+install -Dm644 contrib/desktop/rms-radar-1024.png %{buildroot}%{_datadir}/icons/hicolor/1024x1024/apps/rms-radar.png
 
 %files
 %{_bindir}/rms-radar
 %{_unitdir}/rms-radar.service
 %{_datadir}/applications/rms-radar.desktop
 %{_datadir}/icons/hicolor/scalable/apps/rms-radar.svg
+%{_datadir}/icons/hicolor/1024x1024/apps/rms-radar.png
 %license LICENSE
 %doc README.md
 
@@ -73,6 +75,8 @@ install -Dm644 contrib/desktop/rms-radar.svg %{buildroot}%{_datadir}/icons/hicol
 %systemd_postun rms-radar.service
 
 %changelog
+* Wed Nov 18 2026 RMS Radar contributors - 1.0.1-1
+- Add native desktop RPM and Arch packages
 * Wed Nov 18 2026 RMS Radar contributors - 1.0.0-1
 - First stable release: Docker image, static site, full service-code set
 * Wed Nov 18 2026 RMS Radar contributors - 0.2.10-1
