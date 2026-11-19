@@ -8,6 +8,58 @@ separate binary for local use.
 > or ARSFI. Gateway data comes from Winlink's public API. The official list is
 > at [winlink.org/RMSChannels](https://winlink.org/RMSChannels).
 
+## Docker (recommended)
+
+The image contains the web server and the VOACAP engine (`voacapl` + ITSHFBC
+data on Debian trixie). It runs as an unprivileged user with a healthcheck and
+can run with a read-only root filesystem.
+
+```yaml
+name: rms-radar
+
+services:
+  rms-radar:
+    image: ghcr.io/ben-kuhn/rms-radar:latest
+    container_name: rms-radar
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8079:8079"
+    volumes:
+      - rms-radar-data:/data
+    environment:
+      TZ: UTC
+      RMSRADAR_SERVICE_CODES: "PUBLIC,EMCOMM,MERCURY,VARDEFM,MODEM73,DATA2G,IONHF"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  rms-radar-data:
+```
+
+```bash
+docker compose up -d
+curl -fsS http://127.0.0.1:8079/api/health
+```
+
+The repository's [`compose.yaml`](compose.yaml) is the same setup. The default
+publish is loopback-only; put Caddy/nginx/Traefik or a Cloudflare Tunnel in
+front for remote access. Set `RMSRADAR_ADMIN_TOKEN` to enable service-code
+editing from the UI (or use the API header), and set any other flag as an
+environment variable using the `RMSRADAR_` prefix.
+
+Update with `docker compose pull && docker compose up -d`. The `/data` volume
+holds the gateway cache, tiles, conditions, and the saved service-code
+selection; back it up if you care about offline startup.
+
+**Image tags:** `latest`, `1.0`, `1.0.0`, and `edge` (main). Images are
+multi-arch for linux/amd64 and linux/arm64. The container is also built and
+smoke-tested in CI.
+
 ## Quick start (Linux server)
 
 **Debian / Ubuntu**

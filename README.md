@@ -11,6 +11,9 @@ or command line required — and can also be self-hosted for a club or network.
 > or ARSFI. Gateway data comes from Winlink's public API. The official list and
 > map are at [winlink.org/RMSChannels](https://winlink.org/RMSChannels).
 
+**Website:** [ben-kuhn.github.io/rms-radar](https://ben-kuhn.github.io/rms-radar/) ·
+**Live map:** [rmsradar.ku0hn.radio](https://rmsradar.ku0hn.radio)
+
 ## Download
 
 Get the latest version from the
@@ -54,8 +57,16 @@ and 11. If it is missing, install the
 - **NixOS:** use the
   [`nix-ham-packages`](https://github.com/ben-kuhn/nix-ham-packages) overlay.
 
-Self-hosting the web version? See [SELF-HOSTING.md](SELF-HOSTING.md) for `.deb`,
-`.rpm`, Arch, and NixOS server packages.
+Self-hosting the web version? The fastest path is Docker:
+
+```bash
+docker run -d --name rms-radar --restart unless-stopped   -p 127.0.0.1:8079:8079 -v rms-radar-data:/data   ghcr.io/ben-kuhn/rms-radar:latest
+```
+
+Use a `compose.yaml` and reverse proxy for anything beyond localhost. See the
+[Docker section of SELF-HOSTING.md](SELF-HOSTING.md#docker-recommended) or the
+[website self-hosting guide](https://ben-kuhn.github.io/rms-radar/self-hosting.html)
+for `.deb`, `.rpm`, Arch, NixOS, and Docker details.
 
 ## Using RMS Radar
 

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>RMS Radar — Winlink gateway map</title>
+<meta name="description" content="A free, unofficial map of Winlink RMS gateways with service-code filtering and propagation-aware ranking. Runs natively or self-hosted with Docker.">
+<meta property="og:title" content="RMS Radar — Winlink gateway map">
+<meta property="og:description" content="Find and rank Winlink RMS gateways by service code, band, and mode.">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <div class="wrap nav">
+    <a class="brand" href="index.html"><img src="icon.svg" alt=""> RMS Radar</a>
+    <nav class="nav-links">
+      <a href="index.html#downloads">Download</a>
+      <a href="self-hosting.html">Self-hosting</a>
+      <a href="https://rmsradar.ku0hn.radio" class="keep">Live map</a>
+      <a href="https://github.com/ben-kuhn/rms-radar" class="keep">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <div>
+      <div class="eyebrow">Unofficial · Free · Open source</div>
+      <h1>Winlink gateways,<br>without the guesswork.</h1>
+      <p class="lede">RMS Radar maps the live Winlink RMS gateway list, filters it by service code, band, and mode, and ranks stations by predicted link quality — including an optional VOACAP engine.</p>
+      <div class="buttons">
+        <a class="btn primary" href="#downloads">Download RMS Radar</a>
+        <a class="btn" href="self-hosting.html#docker">Self-host with Docker</a>
+        <a class="btn ghost" href="https://rmsradar.ku0hn.radio">Open the live map</a>
+      </div>
+      <p class="hero-badge" style="margin-top:22px">Current release: <b data-latest-version>latest</b> · Windows, macOS, Linux, Docker</p>
+    </div>
+    <div class="hero-art"><img src="icon.svg" alt="RMS Radar icon"></div>
+  </div>
+
+  <section id="downloads">
+    <div class="wrap">
+      <h2>Download</h2>
+      <p class="sub">The desktop app runs the same map locally and downloads its VOACAP engine on first launch. The server is a single self-contained binary — or use the container.</p>
+
+      <div class="grid four">
+        <div class="card download-card">
+          <h3>Windows</h3>
+          <p class="meta">x86-64 · .zip</p>
+          <p>Native desktop window. No installer, no runtime to install.</p>
+          <a class="btn primary" href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+             data-asset-prefix="rms-radar-desktop-" data-asset-suffix="-windows-amd64.zip">Download for Windows</a>
+          <a class="sub-link" href="https://github.com/ben-kuhn/rms-radar/releases/latest">All release files</a>
+        </div>
+        <div class="card download-card">
+          <h3>macOS</h3>
+          <p class="meta">Apple Silicon · .app.zip</p>
+          <p>Native app bundle. Right-click → Open the first time.</p>
+          <a class="btn primary" href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+             data-asset-prefix="rms-radar-desktop-" data-asset-suffix="-macos-arm64-app.zip">Download for macOS</a>
+          <a class="sub-link" href="https://github.com/ben-kuhn/rms-radar/releases/latest">All release files</a>
+        </div>
+        <div class="card download-card">
+          <h3>Linux</h3>
+          <p class="meta">x86-64 · tarball / .deb</p>
+          <p>Native WebKitGTK app for the desktop, or install the Debian package.</p>
+          <a class="btn primary" href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+             data-asset-prefix="rms-radar-desktop-" data-asset-suffix="-linux-amd64.tar.gz">Download for Linux</a>
+          <a class="sub-link" href="https://github.com/ben-kuhn/rms-radar/releases/latest"
+             data-asset-prefix="rms-radar-desktop_" data-asset-suffix="_amd64.deb">Debian package</a>
+        </div>
+        <div class="card download-card">
+          <h3>Docker</h3>
+          <p class="meta">amd64 / arm64 · GHCR</p>
+          <p>The web map and VOACAP engine in one container. Bring your own reverse proxy.</p>
+          <a class="btn primary" href="self-hosting.html#docker">Docker quick start</a>
+          <a class="sub-link" href="self-hosting.html">All self-hosting options</a>
+        </div>
+      </div>
+
+      <div class="callout" style="margin-top:22px">
+        <strong>First launch on macOS or Windows:</strong>
+        the app is not code-signed yet. On macOS, right-click the app and choose <b>Open</b>
+        (or remove quarantine). On Windows, choose <b>More info → Run anyway</b> if SmartScreen
+        shows a warning. Checksums are published with every release.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Everything in one map</h2>
+      <p class="sub">Built for the way Winlink actually publishes gateways: one station, many channels, and community modems identified by service code.</p>
+      <div class="grid three">
+        <div class="card"><div class="icon">⌘</div><h3>Service-code aware</h3><p>Fetch and filter PUBLIC, EMCOMM, MERCURY, VARDEFM, MODEM73, DATA2G, IONHF, and any private code you add.</p></div>
+        <div class="card"><div class="icon">≈</div><h3>Propagation ranking</h3><p>Built-in real-time estimates work offline; an optional VOACAP engine gives point-to-point HF forecasts.</p></div>
+        <div class="card"><div class="icon">◎</div><h3>Live gateway map</h3><p>Map, list, and mobile views with freshness, bands, modes, frequencies, and gateway details.</p></div>
+        <div class="card"><div class="icon">↻</div><h3>Daily, not hourly</h3><p>Automatically refreshes once a day, with a rate-limited Refresh button for when you need it now.</p></div>
+        <div class="card"><div class="icon">⌁</div><h3>Docker first-class</h3><p>One command, one data volume, multi-arch image, healthcheck, non-root, read-only root filesystem.</p></div>
+        <div class="card"><div class="icon">⌂</div><h3>Runs locally</h3><p>Native desktop windows for Windows, macOS, and Linux; the web build is a single CGO-free binary.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="card docker-card">
+        <div>
+          <div class="eyebrow">Self-hosting</div>
+          <h2 style="margin-top:8px">From pull to map in one command.</h2>
+          <p class="sub" style="margin-bottom:0">The container includes the web server and the VOACAP engine. Run it on a NAS, Raspberry Pi, VPS, or home server behind Caddy, Nginx, or Cloudflare Tunnel.</p>
+        </div>
+        <div class="buttons">
+          <a class="btn primary" href="self-hosting.html#docker">Docker guide</a>
+          <a class="btn" href="self-hosting.html">Other installs</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>RMS Radar is unofficial and not affiliated with the Winlink Development Team or ARSFI.</span>
+    <span><a href="https://github.com/ben-kuhn/rms-radar">Source</a> · <a href="https://github.com/ben-kuhn/rms-radar/blob/main/LICENSE">MIT</a></span>
+  </div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>

@@ -224,3 +224,24 @@ jobs:
         with:
           name: voacap-${{ matrix.os }}
           path: dist-voacap/*
+
+  docker:
+    name: Container smoke test
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: build image
+        run: docker build --build-arg VERSION=ci -t rms-radar:ci .
+      - name: run and probe
+        run: |
+          set -euo pipefail
+          docker run -d --name rms-radar-ci --read-only --tmpfs /tmp:size=64m             --cap-drop ALL --security-opt no-new-privileges:true             -p 127.0.0.1:18079:8079 rms-radar:ci
+          trap 'docker logs rms-radar-ci || true; docker rm -f rms-radar-ci || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18079/api/health >/tmp/health.json; then break; fi
+            sleep 2
+          done
+          grep -q '"ok":true' /tmp/health.json
+          curl -fsS http://127.0.0.1:18079/api/config | grep -q '"voacap":true'
+          docker exec rms-radar-ci /usr/bin/voacapl -v

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Self-hosting — RMS Radar</title>
+<meta name="description" content="Self-host RMS Radar with Docker, a binary, .deb, RPM, Arch, or NixOS. Configuration, reverse proxy, service codes, and VOACAP.">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <div class="wrap nav">
+    <a class="brand" href="index.html"><img src="icon.svg" alt=""> RMS Radar</a>
+    <nav class="nav-links">
+      <a href="index.html#downloads">Download</a>
+      <a href="self-hosting.html">Self-hosting</a>
+      <a href="https://rmsradar.ku0hn.radio" class="keep">Live map</a>
+      <a href="https://github.com/ben-kuhn/rms-radar" class="keep">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap doc">
+  <div class="eyebrow">Self-hosting</div>
+  <h1>Run your own RMS Radar</h1>
+  <p class="lede">One service, one cache directory, no database. Choose the container for the shortest path, or install the package your distro already understands.</p>
+
+  <h2 id="docker">Docker (recommended)</h2>
+  <p>The image includes the web server, the daily gateway refresher, and the VOACAP engine. It runs as an unprivileged user and keeps everything in one volume.</p>
+
+  <h3>Quick start</h3>
+  <pre><code>mkdir -p rms-radar &amp;&amp; cd rms-radar
+cat &gt; compose.yaml &lt;&lt;'YAML'
+name: rms-radar
+
+services:
+  rms-radar:
+    image: ghcr.io/ben-kuhn/rms-radar:latest
+    container_name: rms-radar
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8079:8079"
+    volumes:
+      - rms-radar-data:/data
+    environment:
+      TZ: UTC
+      RMSRADAR_SERVICE_CODES: "PUBLIC,EMCOMM,MERCURY,VARDEFM,MODEM73,DATA2G,IONHF"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  rms-radar-data:
+YAML
+
+docker compose up -d
+curl -fsS http://127.0.0.1:8079/api/health</code></pre>
+
+  <p>Then open <code>http://127.0.0.1:8079</code>. The default publish is loopback-only; put a reverse proxy in front for remote access.</p>
+
+  <h3>Configuration</h3>
+  <table>
+    <thead><tr><th>Variable</th><th>Default</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>RMSRADAR_SERVICE_CODES</code></td><td><code>PUBLIC,EMCOMM,MERCURY,VARDEFM,MODEM73,DATA2G,IONHF</code></td><td>Codes to fetch (no wildcard).</td></tr>
+      <tr><td><code>RMSRADAR_ADMIN_TOKEN</code></td><td>unset</td><td>Enables service-code editing; required in the <code>X-RMS-Radar-Admin</code> header.</td></tr>
+      <tr><td><code>RMSRADAR_REFRESH</code></td><td><code>24h</code></td><td>Automatic refresh interval.</td></tr>
+      <tr><td><code>RMSRADAR_CACHE_DIR</code></td><td><code>/data</code></td><td>Gateway cache, tiles, conditions, and service-code selection.</td></tr>
+      <tr><td><code>RMSRADAR_LISTEN</code></td><td><code>0.0.0.0:8079</code></td><td>Container-internal listen address.</td></tr>
+      <tr><td><code>RMSRADAR_VOACAP_EXECUTABLE</code></td><td><code>/usr/bin/voacapl</code></td><td>VOACAP engine included in the image.</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Find the full flag list in the repository’s <a href="https://github.com/ben-kuhn/rms-radar/blob/main/SELF-HOSTING.md">SELF-HOSTING.md</a>. Flags can be appended after the image name.</p>
+
+  <h3>Reverse proxy</h3>
+  <p>Keep the container bound to loopback and terminate TLS at Caddy, Nginx, or Cloudflare Tunnel. A Caddy example:</p>
+  <pre><code>rmsradar.example.com {
+    reverse_proxy 127.0.0.1:8079
+}</code></pre>
+  <p>If you expose it directly, change the port mapping to <code>"8079:8079"</code> and add firewall rules. RMS Radar has no user authentication; a reverse proxy should provide access control.</p>
+
+  <h3>Updates, data, and backup</h3>
+  <pre><code>docker compose pull
+docker compose up -d
+# backup the named volume
+docker run --rm -v rms-radar_rms-radar-data:/data -v "$PWD":/backup \
+  alpine tar czf /backup/rms-radar-data.tgz -C /data .</code></pre>
+  <p>The data is disposable but contains the gateway cache and tiles, which make startup/offline use faster. The volume name follows the Compose project name; check with <code>docker volume ls</code>.</p>
+
+  <h3>Service codes and admin editing</h3>
+  <p>Servers do not allow service-code editing by default. To enable it, set an admin token and enter the same token in the UI:</p>
+  <pre><code>RMSRADAR_ADMIN_TOKEN=change-me docker compose up -d</code></pre>
+  <pre><code>curl -X POST http://127.0.0.1:8079/api/servicecodes/config \
+  -H 'Content-Type: application/json' \
+  -H 'X-RMS-Radar-Admin: change-me' \
+  -d '{"codes":["PUBLIC","EMCOMM","MERCURY","VARDEFM","MODEM73","DATA2G","IONHF"]}'</code></pre>
+  <p>Winlink does not publish private group codes. Add one only if your group has given it to you.</p>
+
+  <h3>VOACAP</h3>
+  <p>The Docker image already includes <code>voacapl</code> and its ITSHFBC data. The <code>/api/config</code> response shows <code>"voacap":true</code> when it is available. No extra container or download is required.</p>
+
+  <h2>Bare-metal packages</h2>
+  <p>All server packages run the same CGO-free web binary and use a systemd unit with <code>DynamicUser</code>, a <code>StateDirectory</code>, and a read-only system filesystem.</p>
+
+  <h3>Debian / Ubuntu</h3>
+  <pre><code>sudo apt install ./rms-radar_1.0.0_amd64.deb
+sudo systemctl enable --now rms-radar
+curl -fsS http://127.0.0.1:8079/api/health</code></pre>
+  <p>Edit <code>/etc/systemd/system/rms-radar.service.d/override.conf</code> or the packaged unit to change the bind address, service codes, or admin token:</p>
+  <pre><code>[Service]
+Environment=RMSRADAR_SERVICE_CODES=PUBLIC,EMCOMM,MERCURY,VARDEFM,MODEM73,DATA2G,IONHF
+Environment=RMSRADAR_ADMIN_TOKEN=change-me
+ExecStart=
+ExecStart=/usr/bin/rms-radar -d -listen 127.0.0.1:8079 -cache-dir /var/lib/rms-radar</code></pre>
+
+  <h3>Fedora / RHEL</h3>
+  <pre><code>sudo dnf install ./rms-radar-1.0.0-1.*.rpm
+sudo systemctl enable --now rms-radar</code></pre>
+
+  <h3>Arch Linux</h3>
+  <p>Install the released <code>.pkg.tar.zst</code>, or build the <code>PKGBUILD</code> from the repository:</p>
+  <pre><code>sudo pacman -U rms-radar-1.0.0-1-x86_64.pkg.tar.zst
+sudo systemctl enable --now rms-radar</code></pre>
+
+  <h3>NixOS</h3>
+  <p>The <a href="https://github.com/ben-kuhn/nix-ham-packages">nix-ham-packages</a> overlay provides the package and a module:</p>
+  <pre><code>services.rms-radar = {
+  enable = true;
+  listenAddress = "127.0.0.1";
+  port = 8079;
+  serviceCodes = [ "PUBLIC" "EMCOMM" "MERCURY" "VARDEFM" "MODEM73" "DATA2G" "IONHF" ];
+  voacapl = pkgs.voacapl;
+};</code></pre>
+
+  <h3>Standalone binary</h3>
+  <pre><code>tar xzf rms-radar-web-1.0.0-linux-amd64.tar.gz
+./rms-radar-web-1.0.0-linux-amd64 -d \
+  -listen 127.0.0.1:8079 \
+  -cache-dir /var/lib/rms-radar</code></pre>
+  <p>Use the packaged systemd unit in <code>contrib/systemd/</code> as a starting point, or run the binary under your own service manager.</p>
+
+  <h2>Configuration essentials</h2>
+  <table>
+    <thead><tr><th>Flag / env</th><th>Default</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>-listen</code> / <code>RMSRADAR_LISTEN</code></td><td><code>127.0.0.1:8079</code></td><td>Use <code>0.0.0.0:8079</code> only behind a trusted proxy/firewall.</td></tr>
+      <tr><td><code>-service-codes</code> / <code>RMSRADAR_SERVICE_CODES</code></td><td>the seven known codes</td><td>Winlink accepts explicit codes only.</td></tr>
+      <tr><td><code>-refresh</code> / <code>RMSRADAR_REFRESH</code></td><td><code>24h</code></td><td>The UI Refresh button is rate-limited to once every five minutes.</td></tr>
+      <tr><td><code>-cache-dir</code> / <code>RMSRADAR_CACHE_DIR</code></td><td><code>./data</code></td><td>Gateway cache, tiles, conditions, and the saved service-code selection.</td></tr>
+      <tr><td><code>-admin-token</code> / <code>RMSRADAR_ADMIN_TOKEN</code></td><td>unset</td><td>Enables service-code changes on servers.</td></tr>
+      <tr><td><code>-voacap-url</code> / <code>RMSRADAR_VOACAP_URL</code></td><td>unset</td><td>Use a remote VOACAP-compatible API instead of a local engine.</td></tr>
+      <tr><td><code>-voacap-executable</code> / <code>RMSRADAR_VOACAP_EXECUTABLE</code></td><td>auto-detect</td><td>Path to <code>voacapl</code> or <code>voacapw</code>.</td></tr>
+      <tr><td><code>-tile-url</code> / <code>RMSRADAR_TILE_URL</code></td><td>OpenStreetMap</td><td>Proxied and disk-cached; respect the upstream tile policy.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Security</h2>
+  <ul>
+    <li>Binds to <code>127.0.0.1</code> by default. Use a reverse proxy or VPN for remote access.</li>
+    <li>No user accounts. The read APIs are public; ranking is capped and time-limited; tile requests are rate-limited per client.</li>
+    <li>Service-code editing is disabled on servers unless an admin token is configured; desktop editing is same-origin and loopback-only.</li>
+    <li>Downloaded VOACAP bundles are checksum- and minisign-verified. Docker installs the engine from Debian packages.</li>
+    <li>The container runs non-root with a read-only root filesystem, no capabilities, and a dedicated data volume.</li>
+  </ul>
+
+  <h2>API and live reference</h2>
+  <p>The running instance exposes <code>/api/health</code>, <code>/api/gateways</code>, <code>/api/servicecodes</code>, <code>/api/conditions</code>, <code>POST /api/rank</code>, <code>POST /api/refresh</code>, and <code>GET /api/config</code>. The <a href="https://rmsradar.ku0hn.radio">public live map</a> is available as a reference deployment.</p>
+
+  <p class="note" style="margin-top:30px">RMS Radar is unofficial and is not affiliated with the Winlink Development Team or ARSFI. Winlink and the Winlink logo are trademarks of their respective owners.</p>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>RMS Radar self-hosting guide</span>
+    <span><a href="index.html">Home</a> · <a href="https://github.com/ben-kuhn/rms-radar">Source</a> · <a href="https://github.com/ben-kuhn/rms-radar/blob/main/LICENSE">MIT</a></span>
+  </div>
+</footer>
+</body>
+</html>

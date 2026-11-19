@@ -1,0 +1,32 @@
+name: rms-radar
+
+services:
+  rms-radar:
+    image: ghcr.io/ben-kuhn/rms-radar:latest
+    # To build the current checkout instead:
+    # build: .
+    container_name: rms-radar
+    restart: unless-stopped
+    ports:
+      # Loopback-only by default. Put a reverse proxy in front, or change to
+      # "8079:8079" only if you intentionally want to expose it on the LAN.
+      - "127.0.0.1:8079:8079"
+    volumes:
+      - rms-radar-data:/data
+    environment:
+      TZ: UTC
+      RMSRADAR_SERVICE_CODES: "PUBLIC,EMCOMM,MERCURY,VARDEFM,MODEM73,DATA2G,IONHF"
+      # Optional: enables service-code editing from the web UI when entered
+      # in the dialog. Leave unset to keep the endpoint disabled.
+      # RMSRADAR_ADMIN_TOKEN: "change-me"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+
+volumes:
+  rms-radar-data:

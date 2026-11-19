@@ -76,6 +76,11 @@ BASE_URL=http://localhost:8079 npx playwright test
   `29d3902c...`); update the mirror digest in the workflows if it changes.
 - `scripts/build-deb.sh <binary> <package> <version> <arch> <web|desktop>` —
   builds a `.deb` from a prebuilt binary.
+- `Dockerfile` / `compose.yaml` — multi-stage, non-root container with the
+  web server and VOACAP; `ghcr.io/ben-kuhn/rms-radar` is built by the
+  `Container` workflow.
+- `site/` — static download and self-hosting site, published to GitHub Pages
+  by `.github/workflows/pages.yml`.
 - `packaging/arch/PKGBUILD` — Arch package (web/server).
 - `packaging/rpm/rms-radar.spec` — RPM package (web/server).
 - `packaging/common/rms-radar.service` — systemd unit installed by the distro
@@ -95,8 +100,11 @@ key is no longer trusted; v0.2.6 and later bundles use the current key.
 ## CI/CD
 
 - `.github/workflows/ci.yml` — vet, race tests, govulncheck, cross-compile the
-  web targets, build the desktop binary, and build/smoke-test the VOACAP
-  bundles on Linux/macOS/Windows.
+  web targets, build the desktop binary, build/smoke-test the VOACAP bundles,
+  and build/run the container.
+- `.github/workflows/docker.yml` — publish multi-arch images to GHCR on main
+  (`edge`) and release tags (`latest`, semver).
+- `.github/workflows/pages.yml` — publish `site/` to GitHub Pages.
 - `.github/workflows/packaging.yml` — build the Arch, RPM, and Nix packages on
   every push/PR.
 - `.github/workflows/release.yml` — on a `v*` tag: web + desktop + `.deb`/`.rpm`/
