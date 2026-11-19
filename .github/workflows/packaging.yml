@@ -43,8 +43,10 @@ jobs:
           PREFIX="rms-radar-${VERSION}"
           # PKGBUILD source points at the GitHub tag; drop a local tarball with
           # the same name so makepkg uses it instead of downloading.
-          tar -czf "packaging/arch/${PREFIX}.tar.gz" \
+          # Write outside the source tree so tar cannot read its own output.
+          tar -czf "/tmp/${PREFIX}.tar.gz" \
             --exclude=.git --transform "s,^\\./,${PREFIX}/," .
+          mv "/tmp/${PREFIX}.tar.gz" "packaging/arch/${PREFIX}.tar.gz"
           # Validate the local tarball instead of bypassing checksums.
           SHA="$(sha256sum "packaging/arch/${PREFIX}.tar.gz" | awk '{print $1}')"
           sed -i "s/^sha256sums=.*/sha256sums=('${SHA}')/" packaging/arch/PKGBUILD
