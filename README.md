@@ -111,6 +111,8 @@ offline.
   and DATA2G gateways are labelled from their service code, even when Winlink
   advertises them under VARA, ARDOP, or Packet. Variable modem widths are not
   shown for the dedicated project codes.
+- **Shows each channel's operating hours** — 24h for always-on channels, or the
+  UTC schedule when a mode/frequency is only available part of the day.
 - **Ranks by propagation** — a built-in heuristic works everywhere, and an
   optional VOACAP engine gives point-to-point HF forecasts.
 - **Hides implausible paths** — 0% VHF/UHF results are dropped while ranking,

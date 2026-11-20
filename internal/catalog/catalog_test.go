@@ -68,6 +68,7 @@ func TestNormalize(t *testing.T) {
 			Frequency:      7103000,
 			ServiceCode:    "mercury",
 			Gridsquare:     "EM38",
+			OperatingHours: "06-04",
 		}},
 	}}}
 
@@ -87,6 +88,9 @@ func TestNormalize(t *testing.T) {
 	}
 	if ch.Band != "40m" {
 		t.Errorf("Band = %q, want 40m", ch.Band)
+	}
+	if ch.OperatingHours != "06-04" {
+		t.Errorf("OperatingHours = %q, want 06-04", ch.OperatingHours)
 	}
 }
 

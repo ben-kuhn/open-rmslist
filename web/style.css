@@ -268,9 +268,10 @@ select:focus, input:focus { outline: none; border-color: var(--accent); }
   cursor: pointer;
 }
 .more-ch:hover, .more-ch:focus-visible { text-decoration: underline; }
-.ch-row { display: flex; gap: 6px; align-items: baseline; }
+.ch-row { display: flex; flex-wrap: wrap; column-gap: 6px; row-gap: 1px; align-items: baseline; }
 .ch-mode { font-weight: 600; }
 .ch-freq { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.ch-hours { color: var(--text-dim); font-size: 11px; }
 .ch-sc { color: var(--text-dim); font-size: 11px; }
 .best-band { color: var(--accent); font-weight: 600; }
 .ch-row.ch-best { background: var(--accent-soft); border-radius: 3px; padding: 1px 4px; margin: 0 -4px; }

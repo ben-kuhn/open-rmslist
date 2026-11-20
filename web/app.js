@@ -136,6 +136,36 @@ function modeTitle(c) {
   return c.raw_mode && c.raw_mode !== c.mode ? ` title="Winlink reports ${esc(c.raw_mode)}"` : "";
 }
 
+// Winlink's OperatingHours is free-form: most gateways use UTC hour ranges
+// such as "00-23" (all day), "06-04" (overnight), or "00-01,14-23" (split
+// schedule), but some publish clock times or other schedule text. Normalize the
+// common forms without inventing a meaning for values we do not recognize.
+function hoursLabel(hours) {
+  const raw = String(hours || "").trim();
+  if (!raw) return "";
+  if (/^(00?-23|00?-24|24|24\/7)$/.test(raw)) return "24h";
+  if (/^\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}$/.test(raw)) {
+    return raw.replace(/\s*-\s*/, "–") + " UTC";
+  }
+  if (/^\d{4}\/\d{4}$/.test(raw)) {
+    return `${raw.slice(0, 2)}:${raw.slice(2, 4)}–${raw.slice(5, 7)}:${raw.slice(7, 9)} UTC`;
+  }
+  if (/^\d{1,2}\s*-\s*\d{1,2}(?:\s*,\s*\d{1,2}\s*-\s*\d{1,2})*$/.test(raw)) {
+    return raw.replace(/\s*-\s*/g, "–") + " UTC";
+  }
+  return raw;
+}
+
+function hoursHTML(c) {
+  const raw = String(c.operating_hours || "").trim();
+  const label = hoursLabel(raw);
+  if (!label) return "";
+  const title = /^\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}$|^\d{4}\/\d{4}$|^\d{1,2}\s*-\s*\d{1,2}/.test(raw)
+    ? "Operating hours (UTC)"
+    : "Operating hours (as reported by Winlink)";
+  return `<span class="ch-hours" title="${title}">${esc(label)}</span>`;
+}
+
 /* ---------- data ---------- */
 async function load() {
   const [config, serviceCodes, gateways, conditions] = await Promise.all([
@@ -293,6 +323,7 @@ function popupHTML(st, rank) {
   const channels = st.channels.map((c) =>
     `<div class="ch-row${rank && isRankedChannel(c, rank) ? " ch-best" : ""}"><span class="ch-mode"${modeTitle(c)}>${esc(c.mode)}</span>` +
     `<span class="ch-freq">${esc(c.frequency || fmtHz(c.frequency_hz))}</span>` +
+    hoursHTML(c) +
     `<span class="ch-sc">${esc(c.service_code || "PUBLIC")}</span></div>`).join("");
   const rankLine = rank
     ? `<div><b>Link quality:</b> ${rank.link_quality}% · <span class="best-band">${esc(rank.band)} ${esc(rank.mode)}</span> · ${rank.distance_km.toFixed(0)} km · ${rank.band_open ? "open" : "closed"}` +
@@ -370,7 +401,7 @@ function renderList(stations) {
         (r ? ` · ${r.distance_km.toFixed(0)} km` : "") +
         (r && r.note ? ` · ${esc(r.note)}` : "") + `</div>` +
       `<div class="station-channels">${shown.map((c) =>
-        `<div class="ch-row${r && isRankedChannel(c, r) ? " ch-best" : ""}"><span class="ch-mode"${modeTitle(c)}>${esc(c.mode)}</span><span class="ch-freq">${esc(c.frequency || fmtHz(c.frequency_hz))}</span><span class="ch-sc">${esc(c.service_code || "PUBLIC")}</span></div>`).join("")}` +
+        `<div class="ch-row${r && isRankedChannel(c, r) ? " ch-best" : ""}"><span class="ch-mode"${modeTitle(c)}>${esc(c.mode)}</span><span class="ch-freq">${esc(c.frequency || fmtHz(c.frequency_hz))}</span>${hoursHTML(c)}<span class="ch-sc">${esc(c.service_code || "PUBLIC")}</span></div>`).join("")}` +
         (chans.length > 4
           ? `<button type="button" class="more-ch">${expanded ? "Show less" : `+${chans.length - 4} more`}</button>`
           : "") +

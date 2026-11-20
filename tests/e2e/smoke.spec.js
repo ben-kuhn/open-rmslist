@@ -26,8 +26,10 @@ test("deployed UI loads with map tiles and data", async ({ page }) => {
     .poll(() => page.locator("img.leaflet-tile-loaded").count(), { timeout: 30_000 })
     .toBeGreaterThan(0);
 
-  // The station list should be populated.
+  // The station list should be populated, with each channel's UTC operating
+  // hours visible (24h for all-day channels, otherwise a range such as 06–04 UTC).
   expect(await page.locator("#list li").count()).toBeGreaterThan(0);
+  await expect(page.locator(".ch-hours").first()).toContainText(/24h|UTC|\d/);
 
   expect(badTileResponses, badTileResponses.join("\n")).toEqual([]);
 
